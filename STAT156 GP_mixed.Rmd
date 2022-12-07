@@ -1,0 +1,1884 @@
+---
+title: "STAT156 GP James"
+author: "Junshi"
+date: '2022-11-21'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+### Set up: Library, Dataset
+
+```{r}
+#install.packages("haven")
+library(haven)
+library(tidyverse)
+```
+
+Do not run this unless you want to clean data again!!
+```{r}
+rm(list = ls())
+dta <- read_dta("C:/Users/wjs/OneDrive - connect.hku.hk/HKU/Year 4/Berkeley/STAT156/Final Project/Rcode/data_Deming_2008_0217.dta")
+clean <- dta
+```
+
+## Data Cleaning
+
+#### Month, Year
+```{r}
+clean = clean %>% mutate(Age2_Mo86=Age_Mo86) %>% mutate(Age2_Mo88=Age_Mo88) %>% mutate(Age2_Mo90=Age_Mo90) %>% mutate(Age2_Mo92=Age_Mo92) %>% mutate(Age2_Mo94=Age_Mo94) %>% mutate(Age2_Mo96=Age_Mo96) %>% mutate(Age2_Mo98=Age_Mo98) %>% mutate(Age2_Mo100=Age_Mo100) %>% mutate(Age2_Mo102=Age_Mo102) %>% mutate(Age2_Mo104=Age_Mo104)
+
+
+clean = clean %>% 
+  mutate(Age2_Mo86 = ifelse(is.na(Age2_Mo86), PPVTAge86, Age2_Mo86)) %>%
+  mutate(Age2_Mo90 = ifelse(is.na(Age2_Mo90), PPVTAge90, Age2_Mo90)) %>%
+  mutate(Age2_Mo92 = ifelse(is.na(Age2_Mo92), PPVTAge92, Age2_Mo92)) %>%
+  mutate(Age2_Mo94 = ifelse(is.na(Age2_Mo94), PPVTAge94, Age2_Mo94)) %>%
+  mutate(Age2_Mo96 = ifelse(is.na(Age2_Mo96), PPVTAge96, Age2_Mo96)) %>%
+  mutate(Age2_Mo98 = ifelse(is.na(Age2_Mo98), PPVTAge98, Age2_Mo98)) %>%
+  mutate(Age2_Mo100 = ifelse(is.na(Age2_Mo100), PPVTAge100, Age2_Mo100)) %>%
+  mutate(Age2_Mo102 = ifelse(is.na(Age2_Mo102), PPVTAge102, Age2_Mo102)) %>%
+  mutate(Age2_Mo104 = ifelse(is.na(Age2_Mo104), PPVTAge104, Age2_Mo104))
+
+clean = clean %>% mutate(Age_Yr86= Age_Mo86 %/% 12) %>% mutate(Age_Yr88= Age_Mo88 %/% 12) %>% mutate(Age_Yr90= Age_Mo90 %/% 12) %>% mutate(Age_Yr92= Age_Mo92 %/% 12) %>% mutate(Age_Yr94= Age_Mo94 %/% 12) %>% mutate(Age_Yr96= Age_Mo96 %/% 12) %>% mutate(Age_Yr98= Age_Mo98 %/% 12)  %>% mutate(Age_Yr100= Age_Mo100 %/% 12)  %>% mutate(Age_Yr102= Age_Mo102 %/% 12) %>% mutate(Age_Yr104= Age_Mo104 %/% 12)      
+
+
+clean = clean %>% mutate(Age2_Yr86= Age2_Mo86 %/% 12) %>% mutate(Age2_Yr88= Age2_Mo88 %/% 12) %>% mutate(Age2_Yr90= Age2_Mo90 %/% 12) %>% mutate(Age2_Yr92= Age2_Mo92 %/% 12) %>% mutate(Age2_Yr94= Age2_Mo94 %/% 12) %>% mutate(Age2_Yr96= Age2_Mo96 %/% 12) %>% mutate(Age2_Yr98= Age2_Mo98 %/% 12)  %>% mutate(Age2_Yr100= Age2_Mo100 %/% 12) %>% mutate(Age2_Yr102= Age2_Mo102 %/% 12) %>% mutate(Age2_Yr104= Age2_Mo104 %/% 12)  
+```
+
+#### Age eligible & Multiple siblings -> 3698 sample points
+```{r}
+Agecutoff <- 4*12
+
+clean <- filter(clean, Age2_Mo90>=Agecutoff)
+
+numofelig <- function(i,data){
+  nrow(data[data$MotherID == data$MotherID[i],])
+}
+
+#At least one age eligible sibliings
+for(i in 1:nrow(clean)){
+  numofeligsib <- numofelig(i,clean)
+  clean$numofageeligsib[i] <- numofeligsib
+  if(!is.na(numofeligsib)){
+    clean$elig90[i] <- (numofeligsib > 1)
+  }else{
+    clean$elig90[i] <- FALSE
+  }
+}
+clean <- filter(clean, elig90 == TRUE)
+
+#Not deceased
+for(i in 1:nrow(clean)){
+  if(!is.na((clean$Res90[i] == 8))){
+    if((clean$Res90[i] == 8)){
+      clean$elig90[i] <- FALSE
+    }
+  }
+}
+clean <- filter(clean, elig90 == TRUE)
+```
+
+#### Fixed Effect, kids in the family are not in the same category(HS & Preschool) then ineligible
+```{r}
+#HS and Preschool
+clean$HS_90 <- NA
+clean$Pre_90 <- NA
+clean$None_90 <- NA
+clean$PreK <- NA
+for(i in 1:nrow(clean)){
+  suppressWarnings({
+    HS90 <- max(clean$Ever_HS88[i], clean$Ever_HS90[i], na.rm = TRUE)
+    clean$HS_90[i] <- HS90
+    Pre90 <- max(clean$Ever_Preschool88[i],clean$Ever_Preschool90[i], na.rm = TRUE)
+  })
+  
+  clean$Pre_90[i] <- Pre90
+  if(HS90 == 1){
+    clean$Pre_90[i] <- 0
+    clean$None_90[i] <- 0
+    clean$PreK[i] <- 1
+  }else if(Pre90 == 1){
+    clean$HS_90[i] <- 0
+    clean$None_90[i] <- 0
+    clean$PreK[i] <- 2
+  }else{
+    clean$None_90[i] <- 1
+    clean$HS_90[i] <- 0
+    clean$Pre_90[i] <- 0
+    clean$PreK[i] <- 3
+  }
+}
+
+#At least one children in HS
+numofhs <- function(i,data){
+  sum(data[data$MotherID == data$MotherID[i],]$HS_90)
+}
+numofpre <- function(i,data){
+  sum(data[data$MotherID == data$MotherID[i],]$Pre_90)
+}
+numofnone <- function(i,data){
+  sum(data[data$MotherID == data$MotherID[i],]$None_90)
+}
+
+for(i in 1:nrow(clean)){
+  clean$sibhs[i] <- numofhs(i,clean)
+  clean$sibpre[i] <- numofpre(i,clean)
+  clean$sibnone[i] <- numofnone(i,clean)
+}
+
+
+clean$HS_FE90 <- -1
+clean$Pre_FE90 <- -1
+clean$None_FE90 <- -1
+clean$PreK_FE <- -1
+
+```
+
+###This is the original method, which is weird
+for(i in 1:nrow(clean)){
+  temp = ifelse(clean$sibhs[i] != clean$numofageeligsib[i], clean$sibhs[i], NA)
+  temp2 = ifelse(clean$sibpre[i] != clean$numofageeligsib[i], clean$sibpre[i], NA)
+  temp3 = ifelse(clean$sibnone[i] != clean$numofageeligsib[i], clean$sibnone[i], NA)
+  if(!is.na(temp)){
+    clean$HS_FE90[i] <- 1
+  }
+  if(!is.na(temp2)){
+    clean$Pre_FE90[i] <- 1
+  }
+  if(!is.na(temp3)){
+    clean$None_FE90[i] <- 1
+  }
+  if(clean$Pre_FE90[i] == 1|| clean$None_FE90[i] == 1){
+    clean$HS_FE[i] <- 1
+  }
+  if(clean$HS_FE90[i] == 1 || clean$None_FE90[i] == 1){
+    clean$Pre_FE[i] <- 1
+  }
+  if(clean$HS_FE90[i] == 1 || clean$Pre_FE90[i] == 1){
+    clean$None_FE[i] <- 1
+  }
+  if(clean$HS_FE90[i] == 1){
+    clean$PreK_FE[i] = 1
+  }else if(clean$Pre_FE90[i] == 1){
+    clean$PreK_FE[i] = 2
+  }else if(clean$None_FE90[i] == 1){
+    clean$PreK_FE[i] = 3
+  }
+}
+
+clean$PreK_FE <- 0
+###This is my understanding
+for(i in 1:nrow(clean)){
+  if(clean$sibhs[i] != clean$numofageeligsib[i] && clean$sibhs[i] != 0){
+    clean$PreK_FE[i] <- 1
+  }
+  if(clean$sibpre[i] != clean$numofageeligsib[i] && clean$sibpre[i] != 0){
+    clean$PreK_FE[i] <- 1
+  }
+  if(clean$sibnone[i] != clean$numofageeligsib[i] && clean$sibnone[i] != 0){
+    clean$PreK_FE[i] <- 1
+  }
+}
+
+```{r}
+clean$PreK_FE <- NA
+for(i in 1:nrow(clean)){
+  if(clean$sibhs[i] != clean$numofageeligsib[i] && clean$sibhs[i] != 0){
+    clean$PreK_FE[i] <- 1
+  }
+  if(clean$sibpre[i] != clean$numofageeligsib[i] && clean$sibpre[i] != 0){
+    clean$PreK_FE[i] <- 1
+  }
+  if(clean$sibnone[i] != clean$numofageeligsib[i] && clean$sibnone[i] != 0){
+    clean$PreK_FE[i] <- 1
+  }
+}
+
+clean <- clean %>%
+  mutate(PreK_FE = ifelse(PreK_FE == 1, ifelse(HS_90 == 1, 1, ifelse(Pre_90 == 1, 2, 3)), NA))
+
+table(clean$HS_FE90)
+table(clean$PreK_FE)
+```
+
+#### Minor adjustments
+```{r}
+for(i in 1:nrow(clean)){
+  if(clean$Race_Child[i] == 3){
+    clean$Race_Child[i] = 1
+  }
+}
+```
+
+#### Final Cleaned Dataset
+```{r}
+head(clean)
+```
+
+## Table 1 Summary statistics
+Now I create the covariates in Tables 1 and 2 and in the regressions.
+
+
+Calculate multiple index
+#### Permanent Income
+```{r}
+clean <- clean %>% 
+  mutate(
+ NetFamInc78=NetFamInc78*2.82,
+ NetFamInc79=NetFamInc79*2.54,
+ NetFamInc80=NetFamInc80*2.24,
+ NetFamInc81=NetFamInc81*2.03,
+ NetFamInc82=NetFamInc82*1.90,
+ NetFamInc83=NetFamInc83*1.85,
+ NetFamInc84=NetFamInc84*1.78,
+ NetFamInc85=NetFamInc85*1.71,
+ NetFamInc86=NetFamInc86*1.68,
+ NetFamInc87=NetFamInc87*1.62,
+ NetFamInc88=NetFamInc88*1.55,
+ NetFamInc89=NetFamInc89*1.48,
+ NetFamInc90=NetFamInc90*1.41,
+ NetFamInc91=NetFamInc91*1.35,
+ NetFamInc92=NetFamInc92*1.31,
+ NetFamInc93=NetFamInc93*1.27,
+ NetFamInc95=NetFamInc95*1.21,
+ NetFamInc97=NetFamInc97*1.15,
+ NetFamInc99=NetFamInc99*1.10,
+ NetFamInc101=NetFamInc101*1.04) %>% 
+  mutate(PermInc=rowMeans( select(.,NetFamInc78, NetFamInc79, NetFamInc80, 
+                              NetFamInc81, NetFamInc82, NetFamInc83, 
+                              NetFamInc84, NetFamInc85, NetFamInc86,
+                              NetFamInc87, NetFamInc88, NetFamInc89, 
+                              NetFamInc90, NetFamInc91, NetFamInc92, 
+                              NetFamInc93, NetFamInc95, NetFamInc97, 
+                              NetFamInc99, NetFamInc101, NetFamInc103),na.rm = TRUE)) %>%
+  mutate(lnPermInc=log(PermInc),
+         PermInc_std=scale(PermInc))
+clean%>%
+  group_by(Race_Child, PreK) %>%
+  summarize(avg.PermInc = mean(PermInc,na.rm = TRUE),sd.PermInc = sd(PermInc, na.rm = TRUE))
+```
+
+#### Ethnicity & First Born & Gender
+```{r}
+clean <- clean %>%
+  mutate(Hispanic=Race_Child==1, Black=Race_Child==2, 
+         White=Race_Child==3, Male = Sex_Child==1, 
+         NonBlack=Race_Child!=2 && !is.na(Race_Child),
+         FirstBorn = BirthOrder==1) %>% mutate(FirstBorn= ifelse(is.na(BirthOrder), NA, FirstBorn))
+```
+
+#### HighGrade_Moth
+--> code? varlist?
+
+clean$high
+foreach var of varlist HighGrade_Moth* 
+mutate(var=ifelse(var==95, NA, var))
+
+
+MothED=rowmax(clean$HighGrade_Moth)
+MomDropout=MothED<12;
+mutate(MomDropout= ifelse(MothED==NA, NA, MomDropout))
+gen byte MomHS=MothED==12;
+mutate(MomHS= ifelse(MothED==NA, NA, MomHS))
+mutate(MomSomeColl=MothED>=13 & MothED!=NA
+mutate(MomSomeColl= ifelse(MothED==NA, NA, MomSomeColl))
+
+
+#### AFQT
+Maternal AFQT?
+```{r}
+# Create age-adjusted maternal AFQT score
+clean = clean %>% mutate(AgeAFQT=AFQT_Pct81_REV) %>% mutate(AgeAFQT=ifelse(Age_Mom79==14, AgeAFQT*(35.60881/28.79544), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==15, AgeAFQT*(35.60881/32.86273), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==16, AgeAFQT*(35.60881/32.86273), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==17, AgeAFQT*(35.60881/36.3544), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==18, AgeAFQT*(35.60881/33.45777), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==19, AgeAFQT*(35.60881/36.84), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==20, AgeAFQT*(35.60881/41.84536), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==21, AgeAFQT*(35.60881/40.95177), AFQT_Pct81_REV)) %>% mutate(AgeAFQT=ifelse(Age_Mom79==22, AgeAFQT*(35.60881/42.82069), AFQT_Pct81_REV)) %>% mutate(AgeAFQT_std = scale(AgeAFQT))%>% mutate(impAFQT_std = AgeAFQT_std)
+
+#*For a small number of mothers, AFQT score is missing - impute missings for use as a covariate later*;
+
+#impute AgeAFQT_std Black Hispanic Age_Moth_Birth, gen(impAFQT_std);
+```
+
+## Table 2 Covariates Balance Check 
+
+#### Res 0to3(SAME Household as Mom, MomHH) and Health condition before check
+Reside in same household as mother - code zero if they did not reside with mom in any eligible year*;
+
+Calculate Health Condition;
+```{r}
+#install.packages("Rfast")
+library(Rfast)
+
+clean= clean %>% 
+  mutate(MomHH79= ifelse(Res79==1, 1, 0)) %>% 
+  mutate(MomHH80= ifelse(Res80==1, 1, 0)) %>% 
+  mutate(MomHH81= ifelse(Res81==1, 1, 0)) %>% 
+  mutate(MomHH82= ifelse(Res82==1, 1, 0)) %>% 
+  mutate(MomHH83= ifelse(Res83==1, 1, 0)) %>% 
+  mutate(MomHH84= ifelse(Res84==1, 1, 0)) %>% 
+  mutate(MomHH85= ifelse(Res85==1, 1, 0)) %>% 
+  mutate(MomHH86= ifelse(Res86==1, 1, 0)) %>% 
+  mutate(MomHH87= ifelse(Res87==1, 1, 0)) %>% 
+  mutate(MomHH88= ifelse(Res88==1, 1, 0)) %>% 
+  mutate(MomHH89= ifelse(Res89==1, 1, 0)) %>% 
+  mutate(MomHH90= ifelse(Res90==1, 1, 0))
+
+suppressWarnings({
+clean <- clean %>% 
+  mutate(Res_0to3 = ifelse(Age2_Yr104==14, MomHH90, NA)) %>% 
+  mutate(temp1 = ifelse(Age2_Yr104==15, sapply(as.matrix(clean[c("MomHH89", "MomHH90")]),min,na.rm=T), NA)) %>%
+  mutate(temp2 = ifelse(Age2_Yr104==16, sapply(as.matrix(clean[c("MomHH88", "MomHH89", "MomHH90")]),min,na.rm=T), NA)) %>%
+  mutate(temp3 = ifelse(Age2_Yr104==17, sapply(as.matrix(clean[c("MomHH87", "MomHH88", "MomHH89", "MomHH90")]),min,na.rm=T), NA)) %>%
+  mutate(temp4 = ifelse(Age2_Yr104==18, sapply(as.matrix(clean[c("MomHH86","MomHH87","MomHH88", "MomHH89")]),min,na.rm=T), NA)) %>%
+  mutate(temp5 = ifelse(Age2_Yr104==19, sapply(as.matrix(clean[c("MomHH85", "MomHH86","MomHH87", "MomHH88")]),min,na.rm=T), NA)) %>% 
+  mutate(temp6 = ifelse(Age2_Yr104==20, sapply(as.matrix(clean[c("MomHH84", "MomHH85", "MomHH86", "MomHH87")]),min,na.rm=T), NA)) %>% 
+  mutate(temp7 = ifelse(Age2_Yr104==21, sapply(as.matrix(clean[c("MomHH83", "MomHH84", "MomHH85", "MomHH86")]),min,na.rm=T), NA)) %>% 
+  mutate(temp8 = ifelse(Age2_Yr104==22, sapply(as.matrix(clean[c("MomHH82", "MomHH83", "MomHH84", "MomHH85")]),min,na.rm=T), NA)) %>% 
+  mutate(temp9 = ifelse(Age2_Yr104==23, sapply(as.matrix(clean[c("MomHH81", "MomHH82", "MomHH83", "MomHH84")]),min,na.rm=T), NA)) %>% 
+  mutate(temp10 = ifelse(Age2_Yr104==24, sapply(as.matrix(clean[c("MomHH80", "MomHH81", "MomHH82", "MomHH83")]),min,na.rm=T), NA)) %>% 
+  mutate(temp11 = ifelse(Age2_Yr104==25, sapply(as.matrix(clean[c("MomHH79", "MomHH80", "MomHH81", "MomHH82")]),min,na.rm=T), NA)) %>% 
+  mutate(temp12 = ifelse(Age2_Yr104==26, sapply(as.matrix(clean[c("MomHH79", "MomHH80", "MomHH81")]),min,na.rm=T), NA)) %>% 
+  mutate(temp13 = ifelse(Age2_Yr104==27, sapply(as.matrix(clean[c("MomHH79", "MomHH80")]),min,na.rm=T), NA)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+1, temp1, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+2, temp2, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+3, temp3, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+4, temp4, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+5, temp5, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+6, temp6, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+7, temp7, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+8, temp8, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+9, temp9, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+10, temp10, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+11, temp11, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+12, temp12, Res_0to3)) %>%
+  mutate(Res_0to3= ifelse(Age2_Yr104 == 14+13, temp13, Res_0to3))
+})
+
+clean <- clean %>%
+  mutate(Ear86 = NA, Blood86 = NA, Epilepsy86 = NA) %>%
+  mutate()
+  
+local_Health <- c("Brain",
+			"Hyper", 
+			"Asthma", 
+			"Resp", 
+			"Speech", 
+			"Deaf", 
+			"Blind", 
+			"Disturb", 
+			"Allergy", 
+			"Crippled",
+			"Retard", 
+			"Heart", 
+			"Nerve", 
+			"Ear", 
+			"Blood", 
+			"Epilepsy", 
+			"OtherLim")
+
+temp <- clean['MotherID']
+colnums <- c()
+for(x in local_Health){
+  for(y in seq(86,90,2)){
+    col_name1 <- paste(x, y, sep ='')
+    col_name2 <- paste('HealthCond', y, sep ='')
+    newcol_name <- paste("temp",x, y, sep ='')
+    temp[newcol_name] <- ifelse(clean[col_name1] > 0,  1, clean[col_name1])
+    #temp[newcol_name] <- ifelse(!is.na(clean[col_name1]) > 0 & temp[newcol_name] != 1,  0, temp[newcol_name])
+  }
+  temp[x] <- NA
+  colnum <- which(colnames(temp) == x)
+  colnum86 <- which(colnames(temp) == paste("temp",x, 86, sep =''))
+  colnum88 <- which(colnames(temp) == paste("temp",x, 88, sep =''))
+  colnum90 <- which(colnames(temp) == paste("temp",x, 90, sep =''))
+
+  new_colname <- paste(x, "_before", sep ='')
+  temp[new_colname] <- as.numeric(NA)
+  colnum <- which(colnames(temp) == new_colname)
+  colnums <- c(colnums,colnum)
+  for(y in seq(86,90,2)){
+    col_name1 <- paste("temp",x, y, sep ='')
+    col_name2 <- paste("Age2_Mo",y, sep ='')
+    temp[newcol_name] <- ifelse(temp[col_name1] == 1 & clean[col_name2] < 60,  1, NA)
+  }
+}
+
+for(i in 1:nrow(temp)){
+    suppressWarnings(temp[i,colnum] <- max(temp[i,colnum86:(colnum86+2)],na.rm = T))
+  }
+
+clean['HealthCond_before'] <- as.numeric(NA)
+colnum <- which(colnames(clean) == "HealthCond_before")
+for(i in 1:nrow(temp)){
+  clean[i,colnum] <-  max(temp[i,colnums],na.rm = T)
+}
+
+clean <- clean %>%
+  mutate(Res_0to3 = ifelse(Res_0to3 == Inf, NA, Res_0to3),
+         HealthCond_before = as.numeric(HealthCond_before != 1))
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(Res_0to3)) %>%
+  nrow()
+```
+
+
+#### Attrition
+```{r}
+clean$Attrit <- NA
+for(i in 1:nrow(clean)){
+  if(!is.na(clean$YA_LastInterview[i])){
+    if(clean$YA_LastInterview[i] == 2004){
+      clean$Attrit[i] <- 0
+    }else{
+      clean$Attrit[i] <- 1
+    }
+    if(clean$YA_LastInterview[i] == 2002 && clean$Age_Mo102 >= 19*12){
+      clean$Attrit[i] <- 0
+    }else if(clean$YA_LastInterview[i] == 2000 && clean$Age_Mo100 >= 19*12){
+      clean$Attrit[i] <- 0
+    }else if(clean$YA_LastInterview[i] == 1998 && clean$Age_Mo98 >= 19*12){
+      clean$Attrit[i] <- 0
+    }else if(clean$YA_LastInterview[i] == 1996 && clean$Age_Mo96 >= 19*12){
+      clean$Attrit[i] <- 0
+    }else if(clean$YA_LastInterview[i] == 1994 && clean$Age_Mo94 >= 19*12){
+      clean$Attrit[i] <- 0
+    }
+  }
+}
+
+table(clean$Attrit)
+```
+
+#### PPVT Age3
+Finished
+```{r}
+clean$PPVTat3 <- NA
+for(i in 1:nrow(clean)){
+  if(clean$PPVTAge86[i]>=36 && clean$PPVTAge86[i]<47 && is.na(clean$PPVTAge86[i]) != 1){
+    clean$PPVTat3[i]=clean$PPVT_Raw86[i]
+  }else if((clean$PPVTAge88[i]>=36 && clean$PPVTAge88[i]<47) && is.na(clean$PPVTAge88[i]) != 1){
+    clean$PPVTat3[i]=clean$PPVT_Raw88[i]
+  }else if((clean$PPVTAge90[i]>=36 && clean$PPVTAge90[i]<47) && is.na(clean$PPVTAge90[i]) != 1){
+    clean$PPVTat3[i]=clean$PPVT_Raw90[i]
+  }
+}
+```
+
+#### PPVT Age3 --> different code
+```{r}
+# PPVT score at age 3
+
+clean= clean %>% mutate(PPVTat3= ifelse(PPVTAge86>=36 & PPVTAge86<47, PPVT_Raw86, NA)) %>%
+mutate(PPVTat3= ifelse(PPVTAge88>=36 & PPVTAge88<47 & PPVTat3==NA, PPVT_Raw88, NA)) %>%
+mutate(PPVTat3= ifelse(PPVTAge90>=36 & PPVTAge90<47 & PPVTat3==NA, PPVT_Raw90, NA))
+
+
+clean$PPVTat3 <- NA
+for(i in 1:nrow(clean)){
+  if(clean$PPVTAge86[i]>=36 && clean$PPVTAge86[i]<47 && is.na(clean$PPVTAge86[i]) != 1){
+    clean$PPVTat3[i]=clean$PPVT_Raw86[i]
+  }else if((clean$PPVTAge88[i]>=36 && clean$PPVTAge88[i]<47) && is.na(clean$PPVTAge88[i]) != 1){
+    clean$PPVTat3[i]=clean$PPVT_Raw88[i]
+  }else if((clean$PPVTAge90[i]>=36 && clean$PPVTAge90[i]<47) && is.na(clean$PPVTAge90[i]) != 1){
+    clean$PPVTat3[i]=clean$PPVT_Raw90[i]
+  }
+}
+sum(!is.na(clean$PPVTat3) & clean$Sample90 == 1)
+hist(clean$PPVTat3)
+
+
+### covariate
+fereg <- clean %>% 
+  filter(!is.na(PPVTat3), Sample90 == 1) %>%
+  select(PPVTat3, MotherID, HS_90, Pre_90, Male, FirstBorn, Age_Mo90) %>%
+  lm(PPVTat3 ~ HS_90 + Pre_90 + Male + FirstBorn + Age_Mo90 + factor(MotherID), .)
+fereg$coefficients[1:3]
+
+## PPVTat3 HS2_FE90 Pre2_FE90 Male FirstBorn Age2_Mo90
+```
+
+#### Calculate Sample90
+```{r}
+#Should not use HS_FE90, instead I use PreK_
+clean <- clean %>% 
+  mutate(Sample90 = ifelse((PreK_FE == 1) & 
+                             ((SampleID != 12 & !is.na(Attrit) & Attrit == 0 & !is.na(Age_Mo104) & Age_Mo104 >= 19*12) 
+                              |(Attrit == 0 & !is.na(Attrit) & DOB_Yr_Child == 1985 & DOB_Mo_Child < 8)) 
+                             , 1, 0))
+
+clean <- clean %>%
+  mutate(Three = (Age_1stHS88 <= 3 || Age_1stHS90 <= 3)) %>%
+  mutate(NotThree = (!is.na(Age_1stHS88) && Age_1stHS88 > 3) 
+         || (!is.na(Age_1stHS90) && Age_1stHS90 > 3)) %>%
+  mutate(HS_3 = ifelse((Three == 1), 1, ifelse(NotThree == 1, 2, 0))) %>%
+  mutate(PreK_FE_3 = ifelse(PreK_FE == 1 & HS_3 == 1, 0, PreK_FE))
+```
+
+#### Male & FirstBorn
+Finished
+```{r}
+clean <- clean %>%
+  mutate(Male = Sex_Child==1, FirstBorn = BirthOrder==1)
+```
+
+
+#### Ln(Birthweight) & Low Birthweight
+Finished
+```{r}
+clean= clean%>%
+  mutate(Low_BW=ifelse(BirthWeight<88,1,0)) %>% 
+  mutate(VLow_BW= ifelse(BirthWeight<53, 1,0))
+
+clean = clean %>% mutate(logBW=log(BirthWeight))
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(logBW)) %>%
+  nrow()
+```
+
+#### HOME score
+Finished
+```{r}
+clean= clean %>% 
+  mutate(HOME_Pct_0to3= 
+           ifelse(Age2_Yr104<=19 & Age2_Yr104>=16, 
+                  rowMeans(clean[c("HOME_Pct86", "HOME_Pct88")],na.rm = T), NA))%>% 
+  mutate(temp1 = 
+           ifelse(Age2_Yr104<=15 & Age2_Yr104>=14, 
+                  rowMeans(clean[c("HOME_Pct88", "HOME_Pct90")],na.rm = T), NA)) %>%
+  mutate(HOME_Pct_0to3= 
+           ifelse(Age2_Yr104<=15 & Age2_Yr104>=14, temp1, NA)) %>%
+  mutate(HOME_Pct_0to3 = ifelse(Age2_Yr104>=20 & Age2_Yr104<=21, HOME_Pct86, NA))
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(clean$HOME_Pct_0to3)) %>%
+  nrow()
+#drop temp1
+```
+
+#### Father present, ages 0-3, Father_HH_0to3 
+--> drop temp?
+```{r}
+# reference
+which(colnames(clean) == "Father_HH90")
+which(colnames(clean)== "Father_HH92")
+```
+
+
+```{r}
+clean = clean %>% 
+  mutate(Father_HH_0to3 = ifelse(Age2_Yr104==14,rowMeans(clean[c("Father_HH90", "Father_HH92", "Father_HH93")]), NA)) %>% 
+  mutate(temp1 = ifelse(Age2_Yr104==15, rowMeans(clean[c("Father_HH89", "Father_HH90")]), NA)) %>% 
+  mutate(temp2 = ifelse(Age2_Yr104==16, rowMeans(clean[c("Father_HH88", "Father_HH89", "Father_HH90")]), NA)) %>% 
+  mutate(temp3 = ifelse(Age2_Yr104==17, rowMeans(clean[c("Father_HH87", "Father_HH88", "Father_HH89", "Father_HH90")]), NA)) %>% 
+  mutate(temp4 = ifelse(Age2_Yr104==18, rowMeans(clean[c("Father_HH86", "Father_HH87", "Father_HH88", "Father_HH89")]), NA)) %>% 
+  mutate(temp5 = ifelse(Age2_Yr104==19, rowMeans(clean[c("Father_HH85", "Father_HH86","Father_HH87", "Father_HH88")]), NA)) %>% 
+  mutate(temp6 = ifelse(Age2_Yr104==20, rowMeans(clean[c("Father_HH84", "Father_HH85", "Father_HH86", "Father_HH87")]), NA)) %>% 
+  mutate(temp7 = ifelse(Age2_Yr104==21, rowMeans(clean[c("Father_HH84", "Father_HH85", "Father_HH86")]), NA)) %>% 
+  mutate(temp8 = ifelse(Age2_Yr104==22, rowMeans(clean[c("Father_HH84", "Father_HH85")]), NA))
+
+clean=clean%>% mutate(Father_HH_0to3 = ifelse(Age2_Yr104==15, temp1, Father_HH_0to3)) %>% 
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==16, temp2, Father_HH_0to3)) %>%
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==17, temp3, Father_HH_0to3)) %>% 
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==18, temp4, Father_HH_0to3)) %>%
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==19, temp5, Father_HH_0to3)) %>%
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==20, temp6, Father_HH_0to3)) %>% 
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==21, temp7, Father_HH_0to3)) %>%
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==22, temp8, Father_HH_0to3)) %>% 
+mutate(Father_HH_0to3 = ifelse(Age2_Yr104==23, Father_HH84, Father_HH_0to3))
+#drop temp
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(Father_HH_0to3)) %>%
+  nrow()
+```
+
+#### Grandmother present, ages 0-3, GMom_0to3 
+--> drop temp?
+```{r}
+clean= clean %>% 
+  mutate(GMom79= ifelse(Grandmother79==1, 1, 0)) %>% 
+  mutate(GMom80= ifelse(Grandmother80==1, 1, 0)) %>% 
+  mutate(GMom81= ifelse(Grandmother81==1, 1, 0)) %>% 
+  mutate(GMom82= ifelse(Grandmother82==1, 1, 0)) %>% 
+  mutate(GMom83= ifelse(Grandmother83==1, 1, 0)) %>% 
+  mutate(GMom84= ifelse(Grandmother84==1, 1, 0)) %>% 
+  mutate(GMom85= ifelse(Grandmother85==1, 1, 0)) %>% 
+  mutate(GMom86= ifelse(Grandmother86==1, 1, 0)) %>% 
+  mutate(GMom87= ifelse(Grandmother87==1, 1, 0)) %>% 
+  mutate(GMom88= ifelse(Grandmother88==1, 1, 0)) %>% 
+  mutate(GMom89= ifelse(Grandmother89==1, 1, 0)) %>% 
+  mutate(GMom90= ifelse(Grandmother90==1, 1, 0))
+
+
+clean = clean %>% 
+  mutate(GMom_0to3 = ifelse(Age2_Yr104==14, GMom90, NA)) %>% 
+  mutate(temp1 = ifelse(Age2_Yr104==15, rowMeans(clean[c("GMom89", "GMom90")],na.rm = T), NA)) %>% 
+  mutate(temp2 = ifelse(Age2_Yr104==16, rowMeans(clean[c("GMom88", "GMom89", "GMom90")],na.rm = T), NA)) %>% 
+  mutate(temp3 = ifelse(Age2_Yr104==17, rowMeans(clean[c("GMom87", "GMom88", "GMom89", "GMom90")],na.rm = T), NA)) %>% 
+  mutate(temp4 = ifelse(Age2_Yr104==18, rowMeans(clean[c("GMom86","GMom87","GMom88", "GMom89")],na.rm = T), NA)) %>% 
+  mutate(temp5 = ifelse(Age2_Yr104==19, rowMeans(clean[c("GMom85", "GMom86","GMom87", "GMom88")],na.rm = T), NA)) %>% 
+  mutate(temp6 = ifelse(Age2_Yr104==20, rowMeans(clean[c("GMom84", "GMom85", "GMom86", "GMom87")],na.rm = T), NA)) %>% 
+  mutate(temp7 = ifelse(Age2_Yr104==21, rowMeans(clean[c("GMom83", "GMom84", "GMom85", "GMom86")],na.rm = T), NA)) %>% 
+  mutate(temp8 = ifelse(Age2_Yr104==22, rowMeans(clean[c("GMom82", "GMom83", "GMom84", "GMom85")],na.rm = T), NA)) %>% 
+  mutate(temp9 = ifelse(Age2_Yr104==23, rowMeans(clean[c("GMom81", "GMom82", "GMom83", "GMom84")],na.rm = T), NA)) %>% 
+  mutate(temp10 = ifelse(Age2_Yr104==24, rowMeans(clean[c("GMom80", "GMom81", "GMom82", "GMom83")],na.rm = T), NA)) %>% 
+  mutate(temp11 = ifelse(Age2_Yr104==25, rowMeans(clean[c("GMom79", "GMom80", "GMom81", "GMom82")],na.rm = T), NA)) %>% 
+  mutate(temp12 = ifelse(Age2_Yr104==26, rowMeans(clean[c("GMom79", "GMom80", "GMom81")],na.rm = T), NA)) %>% 
+  mutate(temp13 = ifelse(Age2_Yr104==27, rowMeans(clean[c("GMom79", "GMom80")],na.rm = T), NA)) 
+
+clean= clean %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==15, temp1, NA)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==16, temp2, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==17, temp3, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==18, temp4, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==19, temp5, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==20, temp6, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==21, temp7, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==22, temp8, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==23, temp9, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==24, temp10, GMom_0to3))%>% mutate(GMom_0to3 = ifelse(Age2_Yr104==25, temp11, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==26, temp12, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==27, temp13, GMom_0to3)) %>% mutate(GMom_0to3 = ifelse(Age2_Yr104==28, GMom79, GMom_0to3)) 
+
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(GMom_0to3)) %>%
+  nrow()
+#drop temp* GMom79-GMom90
+```
+
+#### Mom Care 0-3, Relative Care 0-3, Nonrelative care 0-3
+```{r}
+clean = clean %>% mutate(
+  ChildCare_1_Yr = ChildCare_1stYr,
+  ChildCare_Type_1_Yr = ChildCare_Type_1stYr,
+  ChildCare_2_Yr = ChildCare_2ndYr, 
+  ChildCare_Type_2_Yr = ChildCare_Type_2ndYr, 
+  ChildCare_3_Yr = ChildCare_3rdYr,
+  ChildCare_Type_3_Yr = ChildCare_Type_3rdYr)
+
+
+clean=clean %>% 
+  
+  mutate(RelCare_1_Yr= ifelse(!is.na(ChildCare_Type_1_Yr) &  ChildCare_Type_1_Yr<=10, 1, NA)) %>%
+  mutate(RelCare_1_Yr= ifelse(!is.na(ChildCare_1_Yr) & (is.na(RelCare_1_Yr) | RelCare_1_Yr!=1), 0, RelCare_1_Yr)) %>%
+  mutate(NonRelCare_1_Yr= ifelse(!is.na(ChildCare_Type_1_Yr) & ChildCare_Type_1_Yr>10, 1, NA)) %>%
+  mutate(NonRelCare_1_Yr= ifelse(!is.na(ChildCare_1_Yr) & (is.na(NonRelCare_1_Yr) | NonRelCare_1_Yr!=1), 0, NonRelCare_1_Yr)) %>%
+  mutate(MomCare_1_Yr= ifelse(RelCare_1_Yr==0 & NonRelCare_1_Yr==0, 1, NA)) %>% 
+  mutate(MomCare_1_Yr= ifelse(!is.na(RelCare_1_Yr) & !is.na(NonRelCare_1_Yr) & (is.na(MomCare_1_Yr) | MomCare_1_Yr!=1), 0, MomCare_1_Yr)) %>% 
+  
+  mutate(RelCare_2_Yr= ifelse(!is.na(ChildCare_Type_2_Yr) &  ChildCare_Type_2_Yr<=10, 1, NA)) %>%
+  mutate(RelCare_2_Yr= ifelse(!is.na(ChildCare_2_Yr) & (is.na(RelCare_2_Yr) | RelCare_2_Yr!=1), 0, RelCare_2_Yr)) %>%
+  mutate(NonRelCare_2_Yr= ifelse(!is.na(ChildCare_Type_2_Yr) & ChildCare_Type_2_Yr>10, 1, NA)) %>%
+  mutate(NonRelCare_2_Yr= ifelse(!is.na(ChildCare_2_Yr) & (is.na(NonRelCare_2_Yr) | NonRelCare_2_Yr!=1), 0, NonRelCare_2_Yr)) %>%
+  mutate(MomCare_2_Yr= ifelse(RelCare_2_Yr==0 & NonRelCare_2_Yr==0, 1, NA)) %>% 
+  mutate(MomCare_2_Yr= ifelse(!is.na(RelCare_2_Yr) & !is.na(NonRelCare_2_Yr) & (is.na(MomCare_2_Yr) | MomCare_2_Yr!=1), 0, MomCare_2_Yr))%>% 
+  
+  mutate(RelCare_3_Yr= ifelse(!is.na(ChildCare_Type_3_Yr) &  ChildCare_Type_3_Yr<=10, 1, NA)) %>%
+  mutate(RelCare_3_Yr= ifelse(!is.na(ChildCare_3_Yr) & (is.na(RelCare_3_Yr) | RelCare_3_Yr!=1), 0, RelCare_3_Yr)) %>%
+  mutate(NonRelCare_3_Yr= ifelse(!is.na(ChildCare_Type_3_Yr) & ChildCare_Type_3_Yr>10, 1, NA)) %>%
+  mutate(NonRelCare_3_Yr= ifelse(!is.na(ChildCare_3_Yr) & (is.na(NonRelCare_3_Yr) | NonRelCare_3_Yr!=1), 0, NonRelCare_3_Yr)) %>%
+  mutate(MomCare_3_Yr= ifelse(RelCare_3_Yr==0 & NonRelCare_3_Yr==0, 1, NA)) %>% 
+  mutate(MomCare_3_Yr= ifelse(!is.na(RelCare_3_Yr) & !is.na(NonRelCare_3_Yr) & (is.na(MomCare_3_Yr) | MomCare_3_Yr!=1), 0, MomCare_3_Yr))
+
+clean = clean %>% 
+  mutate(RelCare=rowMeans(clean[c("RelCare_1_Yr","RelCare_2_Yr","RelCare_3_Yr")],na.rm = T), 
+         NonRelCare=rowMeans(clean[c("NonRelCare_1_Yr","NonRelCare_2_Yr","NonRelCare_3_Yr")],na.rm = T),
+         MomCare=rowMeans(clean[c("MomCare_1_Yr","MomCare_2_Yr","MomCare_3_Yr")],na.rm = T))
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(MomCare)) %>%
+  nrow()
+```
+
+#### Mom smoked, Mom drank, Breastfed, Doctor's visit in last 3 months, Dentist ever, Weight Change during preg
+*UNCHANGED - Moth_Smoke_BefBirth, Breastfed, Moth_WeightChange*;
+```{r}
+clean <- clean %>%
+  mutate(Alc_BefBirth= ifelse(Freq_Alc_BefBirth>=3, 1, 0)) %>%
+  mutate(Doctor_temp= ifelse(Age2_Yr104<=19 & Age2_Yr104>=16,
+                             rowMeans(clean[c("Last_Doctor86","Last_Doctor88")],na.rm = T),NA))%>%
+  mutate(temp1= ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,
+                             rowMeans(clean[c("Last_Doctor86","Last_Doctor88")],na.rm = T),NA))%>%
+  mutate(Doctor_temp = ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,temp1 ,Doctor_temp)) %>%
+  mutate(Doctor_temp = ifelse(Age2_Yr104>=20 & Age2_Yr104<=21,Last_Doctor86,Doctor_temp)) %>%
+  
+  mutate(Dentist_temp= ifelse(Age2_Yr104<=19 & Age2_Yr104>=16,
+                             rowMeans(clean[c("Last_Dentist86","Last_Dentist88")],na.rm = T),NA))%>%
+  mutate(temp1= ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,
+                             rowMeans(clean[c("Last_Dentist86","Last_Dentist88")],na.rm = T),NA))%>%
+  mutate(Dentist_temp = ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,temp1 ,Dentist_temp)) %>%
+  mutate(Dentist_temp = ifelse(Age2_Yr104>=20 & Age2_Yr104<=21,Last_Dentist86,Dentist_temp))%>%
+  
+  mutate(Doctor_0to3= ifelse(Doctor_temp<=2, 1, NA)) %>%
+  mutate(Doctor_0to3= ifelse(Doctor_temp>2, 0, Doctor_0to3)) %>%
+  
+  mutate(Dentist_0to3= ifelse(Dentist_temp<7, 1, NA)) %>%
+  mutate(Dentist_0to3= ifelse(Dentist_temp==7, 0, Dentist_0to3))
+  
+clean %>%   
+  filter(Sample90 == 1, !is.na(Dentist_0to3)) %>%  
+  nrow()
+```
+
+#### Illness in 1st year, Premature birth, Birthweight, Priv Health Insurance 0-3, Medicaid 0-3
+Finished
+```{r}
+clean= clean %>% 
+  mutate(Premature=ifelse(BornEarlyorLate==1, 1, 0)) %>%
+  mutate(Insurance_0to3= ifelse(Age2_Yr104<=19 & Age2_Yr104>=16,
+                             rowMeans(clean[c("Insurance86","Insurance88")],na.rm = T),NA)) %>%
+  mutate(temp1= ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,
+                             rowMeans(clean[c("Insurance88","Insurance90")],na.rm = T),NA)) %>%
+  mutate(Insurance_0to3=ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,temp1,Insurance_0to3)) %>%
+  mutate(Insurance_0to3=ifelse(Age2_Yr104>=20 & Age2_Yr104<=21,Insurance86,Insurance_0to3)) %>%
+  
+  mutate(Medicaid_0to3= ifelse(Age2_Yr104<=19 & Age2_Yr104>=16,
+                             rowMeans(clean[c("Medicaid86","Medicaid88")],na.rm = T),NA)) %>%
+  mutate(temp1= ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,
+                             rowMeans(clean[c("Medicaid88","Medicaid90")],na.rm = T),NA)) %>%
+  mutate(Medicaid_0to3=ifelse(Age2_Yr104<=15 & Age2_Yr104>=14,temp1,Medicaid_0to3)) %>%
+  mutate(Medicaid_0to3=ifelse(Age2_Yr104>=20 & Age2_Yr104<=21,Medicaid86,Medicaid_0to3))
+
+clean %>%   
+  filter(Sample90 == 1, !is.na(Insurance_0to3), !is.na(Medicaid_0to3)) %>%  
+  nrow()
+```
+#### Log Income Ages 0-3, Log Income at Age 3
+Finished
+```{r}
+clean=clean %>% mutate(Income78=NetFamInc78, Income79=NetFamInc79, Income80=NetFamInc80, Income81=NetFamInc81, Income82=NetFamInc82, Income83=NetFamInc83, Income84=NetFamInc84, Income85=NetFamInc85, Income86=NetFamInc86, Income87=NetFamInc87, Income88=NetFamInc88, Income89=NetFamInc89, Income90=NetFamInc90)
+
+clean = clean %>% mutate(
+  Income_0to3=ifelse(Age2_Yr104==14, Income90, NA),
+  temp1= ifelse(Age2_Yr104==15, rowMeans(clean[c("Income89", "Income90")],na.rm = T), NA),
+  temp2= ifelse(Age2_Yr104==16, rowMeans(clean[c("Income88", "Income89", "Income90")],na.rm = T), NA),
+  temp3= ifelse(Age2_Yr104==17, rowMeans(clean[c("Income87","Income88",
+"Income89","Income90")],na.rm = T), NA),
+  temp4= ifelse(Age2_Yr104==18, rowMeans(clean[c("Income86", "Income87", "Income88", "Income89")],na.rm = T), NA),
+  temp5= ifelse(Age2_Yr104==19, rowMeans(clean[c("Income85", "Income86", "Income87", "Income88")],na.rm = T), NA),
+  temp6= ifelse(Age2_Yr104==20, rowMeans(clean[c("Income84", "Income85", "Income86","Income87")],na.rm = T), NA),
+  temp7= ifelse(Age2_Yr104==21, rowMeans(clean[c("Income83", "Income84", "Income85","Income86")],na.rm = T), NA),
+  temp8= ifelse(Age2_Yr104==22, rowMeans(clean[c("Income82", "Income83", "Income84", "Income85")],na.rm = T), NA),
+  temp9= ifelse(Age2_Yr104==23, rowMeans(clean[c("Income81", "Income82", "Income83", "Income84")],na.rm = T), NA),
+  temp10= ifelse(Age2_Yr104==24, rowMeans(clean[c("Income80", "Income81", "Income82", "Income83")],na.rm = T), NA),
+  temp11= ifelse(Age2_Yr104==25, rowMeans(clean[c("Income79", "Income80", "Income81", "Income82")],na.rm = T), NA),
+  temp12= ifelse(Age2_Yr104==26, rowMeans(clean[c("Income79", "Income80", "Income81")],na.rm = T), NA),
+  temp13= ifelse(Age2_Yr104==27, rowMeans(clean[c("Income78", "Income79", "Income80")],na.rm = T), NA),
+  temp14= ifelse(Age2_Yr104==28, rowMeans(clean[c("Income78", "Income79")],na.rm = T), NA))
+
+
+clean = clean %>% mutate(
+Income_0to3=ifelse(Age2_Yr104==15, temp1, NA),
+Income_0to3=ifelse(Age2_Yr104==16, temp2, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==17, temp3, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==18, temp4, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==19, temp5, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==20, temp6, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==21, temp7, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==22, temp8, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==23, temp9, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==24, temp10, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==25, temp11, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==26, temp12, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==27, temp13, Income_0to3),
+Income_0to3=ifelse(Age2_Yr104==28, temp14, Income_0to3))
+
+clean = clean %>% mutate(
+  Income_0to3 = ifelse(Age2_Yr104==29, Income78, Income_0to3),
+  LogInc_0to3=log(Income_0to3))
+
+# drop temp* Income78-Income90
+
+
+clean=clean %>% mutate(
+IncAt3=ifelse(Age2_Yr104==29, NetFamInc78, NA), 
+IncAt3=ifelse(Age2_Yr104==28, NetFamInc79, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==27, NetFamInc80, IncAt3),  
+IncAt3=ifelse(Age2_Yr104==26, NetFamInc81, IncAt3),  
+IncAt3=ifelse(Age2_Yr104==25, NetFamInc82, IncAt3),  
+IncAt3=ifelse(Age2_Yr104==24, NetFamInc83, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==23, NetFamInc84, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==22, NetFamInc85, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==21, NetFamInc86, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==20, NetFamInc87, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==19, NetFamInc88, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==18, NetFamInc89, IncAt3), 
+IncAt3=ifelse(Age2_Yr104==17, NetFamInc90, IncAt3),
+LogIncAt3=log(IncAt3))
+
+clean <- clean %>%
+  mutate(LogInc_0to3 = ifelse(LogInc_0to3 == -Inf, NA, LogInc_0to3),
+         LogIncAt3 = ifelse(LogIncAt3 == -Inf, NA, LogIncAt3))
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(LogInc_0to3)) %>%
+  nrow()
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(LogIncAt3)) %>%
+  nrow()
+```
+
+#### Mom worked 0-3, Avg. wks. stopped work before birth (cond. on having a job), Mom hrs worked/wk 0-1*;
+Moth_HrsWorked_0to3 and Moth_HrsWorked_Avg_0to3 are not used
+```{r}
+clean= clean %>% 
+  mutate(temp=rowMeans(clean[c("Moth_HrsWorked_1_Qtr_Before",
+                               "Moth_HrsWorked_2_Qtr_Before",
+                      "Moth_HrsWorked_3_Qtr_Before"
+                      ,"Moth_HrsWorked_4_Qtr_Before")], na.rm = T)) %>%
+  mutate(Moth_HrsWorked_BefBirth=temp/13)
+# drop temp
+
+clean = clean %>% 
+  mutate(Moth_HrsWorked_0to3=
+           rowMeans(clean[c("Moth_HrsWorked_1_Qtr", "Moth_HrsWorked_2_Qtr",
+                            "Moth_HrsWorked_3_Qtr","Moth_HrsWorked_4_Qtr",
+                            "Moth_HrsWorked_5_Qtr", "Moth_HrsWorked_6_Qtr",
+                            "Moth_HrsWorked_7_Qtr","Moth_HrsWorked_8_Qtr",
+                            "Moth_HrsWorked_9_Qtr", "Moth_HrsWorked_10_Qtr",
+                            "Moth_HrsWorked_11_Qtr","Moth_HrsWorked_12_Qtr"
+                            )], na.rm = T)) %>%
+  mutate(Moth_HrsWorked_Avg_0to3=
+           rowMeans(clean[c("Moth_HrsWorked_1_Avg", "Moth_HrsWorked_2_Avg",
+                            "Moth_HrsWorked_3_Avg","Moth_HrsWorked_4_Avg",
+                            "Moth_HrsWorked_5_Avg", "Moth_HrsWorked_6_Avg",
+                            "Moth_HrsWorked_7_Avg","Moth_HrsWorked_8_Avg",
+                            "Moth_HrsWorked_9_Avg", "Moth_HrsWorked_10_Avg",
+                            "Moth_HrsWorked_11_Avg","Moth_HrsWorked_12_Avg"
+                            )], na.rm = T)) %>%
+  mutate(Moth_HrsWorked_0to1=
+           rowMeans(clean[c("Moth_HrsWorked_1_Avg", 
+                            "Moth_HrsWorked_2_Avg", 
+                            "Moth_HrsWorked_3_Avg", 
+                            "Moth_HrsWorked_4_Avg")], na.rm = T))
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(Moth_HrsWorked_BefBirth)) %>%
+  nrow()
+
+clean %>% 
+  filter(Sample90 == 1, !is.na(Moth_HrsWorked_0to1)) %>%
+  nrow()
+```
+
+
+#### Mom smoked, Mom drank
+UNCHANGED - Moth_Smoke_BefBirth, Breastfed, Moth_WeightChange*;
+```{r}
+
+```
+
+### Create Table2 with FEREG
+Res_0to3: Done
+HealthCond_before: Not done
+VLow_BW, logBW: Done
+LogInc_0to3, LogIncAt3: Done
+FirstBorn Male : Done
+Age2_Yr104: Done
+HOME_Pct_0to3: Done
+Moth_HrsWorked_BefBirth, Moth_HrsWorked_0to1: Done
+Father_HH_0to3, GMom_0to3 : Done
+MomCare, RelCare, NonRelCare : Done
+Moth_Smoke_BefBirth, Alc_BefBirth : Done
+Breastfed Doctor_0to3 Dentist_0to3 : Done
+Moth_WeightChange : Done
+Illness_1stYr Premature Insurance_0to3 Medicaid_0to3 : Done
+PreTreatIndex: Not done
+
+#### Attrit & PPVTAGE3, FEREG
+```{r}
+## Attrit
+fereg <- clean %>% 
+  filter((PreK_FE == 1) & SampleID!=12 & (Age_Mo104>=19*12 | (DOB_Yr_Child==1985 & DOB_Mo_Child<9))) %>%
+  select(Attrit, MotherID, HS_90, Pre_90, Male, FirstBorn, Age_Mo90) %>%
+  lm(Attrit ~ HS_90 + Pre_90 + factor(MotherID), .)
+fereg$coefficients[1:3]
+
+## PPVTAge3: matches 195 sample size
+sum(!is.na(clean$PPVTat3) & clean$Sample90 == 1) 
+
+fereg <- clean %>% 
+  filter(!is.na(PPVTat3), Sample90 == 1) %>%
+  select(PPVTat3, MotherID, HS_90, Pre_90, Male, FirstBorn, Age_Mo90) %>%
+  lm(PPVTat3 ~ HS_90 + Pre_90 + Male + FirstBorn + Age_Mo90 + factor(MotherID), .)
+fereg$coefficients[1:3]
+```
+
+#### All other covariates, FEREG
+```{r}
+## VLow_BW, logBW
+fereg <- clean %>%
+  filter(Sample90 == 1) %>%
+  select(VLow_BW, MotherID, HS_90, Pre_90) %>%
+  lm(VLow_BW ~ HS_90 + Pre_90 + factor(MotherID),.)
+fereg$coefficients[1:3]
+
+## FirstBorn
+fereg <- clean %>%
+  filter(Sample90 == 1) %>%
+  select(FirstBorn, MotherID, HS_90, Pre_90) %>%
+  lm(FirstBorn ~ HS_90 + Pre_90 + factor(MotherID), .)
+fereg$coefficients[1:3]
+
+## Male: Got opposite result
+fereg <- clean %>%
+  filter(Sample90 == 1) %>%
+  select(Sex_Child, Male, MotherID, HS_90, Pre_90) %>%
+  lm(Male ~ HS_90 + Pre_90 + factor(MotherID), ., )
+fereg$coefficients[1:3]
+
+## Home score: scale is wrong but the ratio is right
+fereg <- clean %>%
+  filter(Sample90 == 1) %>%
+  select(HOME_Pct_0to3, MotherID, HS_90, Pre_90) %>%
+  lm(HOME_Pct_0to3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+
+## MomCare RelCare NonRelCare
+fereg <- clean %>%
+  filter(Sample90 == 1) %>%
+  select(MomCare, MotherID, HS_90, Pre_90) %>%
+  lm(MomCare ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+
+## Moth_HrsWorked_0to1
+fereg <- clean %>%
+  filter(Sample90 == 1) %>%
+  select(Moth_HrsWorked_0to1, MotherID, HS_90, Pre_90) %>%
+  lm(Moth_HrsWorked_0to1 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+
+## LogInc_0to3, LogIncAt3
+fereg <- clean %>%
+  filter(Sample90 == 1, LogInc_0to3 > -Inf) %>%
+  select(LogInc_0to3, MotherID, HS_90, Pre_90) %>%
+  lm(LogInc_0to3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+
+fereg <- clean %>%
+  filter(Sample90 == 1, LogIncAt3 > -Inf) %>%
+  select(LogIncAt3, MotherID, HS_90, Pre_90) %>%
+  lm(LogIncAt3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+
+## Breastfed Doctor_0to3 Dentist_0to3
+fereg <- clean %>%
+  filter(Sample90 == 1, !is.na(Dentist_0to3)) %>%
+  select(Dentist_0to3, MotherID, HS_90, Pre_90) %>%
+  lm(Dentist_0to3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+round(summary(fereg)[[4]][2:3,],3)
+
+#Moth_WeightChange : Done
+fereg <- clean %>%
+  filter(Sample90 == 1, LogInc_0to3 > -Inf) %>%
+  select(LogInc_0to3, MotherID, HS_90, Pre_90) %>%
+  lm(LogInc_0to3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+
+
+#Illness_1stYr Premature Insurance_0to3 Medicaid_0to3 : Done
+fereg <- clean %>%
+  filter(Sample90 == 1, !is.na(Medicaid_0to3)) %>%
+  select(Medicaid_0to3, MotherID, HS_90, Pre_90) %>%
+  lm(Medicaid_0to3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+round(summary(fereg)[[4]][2:3,],3)
+
+#PreTreatIndex: Not done
+fereg <- clean %>%
+  filter(Sample90 == 1, LogInc_0to3 > -Inf) %>%
+  select(LogInc_0to3, MotherID, HS_90, Pre_90) %>%
+  lm(LogInc_0to3 ~ HS_90 + Pre_90 + factor(MotherID), ., )
+summary(fereg)[[4]][2:3,]
+```
+
+## Table 3 Outcome Regression Model
+
+### Create Groups, Test Score Index, Pivot the Table
+```{r}
+for(i in seq(86,104,2)){
+  col_name <- paste('PPVTAge',i,sep = '')
+  newcol_name <- paste("AgeTest_Yr",i, sep ='')
+  clean[newcol_name] <- clean[col_name] %/% 12
+}
+
+for(i in seq(86,104,2)){
+  col_name1 <- paste('PPVT_Pct',i,sep = '')
+  col_name2 <- paste('PIATMT_Pct',i,sep = '')
+  col_name3 <- paste('PIATRR_Pct',i,sep = '')
+  newcol_name <- paste("Test_Pct",i, sep ='')
+  clean[newcol_name] <- rowMeans(data.frame(clean[col_name1], clean[col_name2],clean[col_name3]), na.rm = 1)
+}
+
+
+## Use rbind to creat two columns Test score and Age Test year
+clean_long <- data.frame()
+#list of keep: ChildID MotherID Attrit Age2_Yr104 Black NonBlack Male PermInc_std MomHS MomSomeColl impAFQT_std PreK_FE PreK_FE_3 HS2_FE90 Pre2_FE90 `Covariates' PreTreatIndex PIATMT_Pct* PIATMT_Raw* PIATRR_Pct	PIATRR_Raw PPVT_Pct PPVT_Raw* Test_Pct* BPI_Pct* BPIAS_Pct* AgeTest_Yr
+
+#list of cov: Res_0to3 HealthCond_before VLow_BW logBW LogInc_0to3 LogIncAt3 FirstBorn PPVTat3 HOME_Pct_0to3 Moth_HrsWorked_BefBirth Moth_HrsWorked_Avg_0to3 Moth_HrsWorked_0to1	Father_HH_0to3 GMom_0to3 MomCare RelCare NonRelCare Moth_Smoke_BefBirth Alc_BefBirth Breastfed Doctor_0to3 Dentist_0to3 Moth_WeightChange Illness_1stYr Premature Insurance_0to3 			Medicaid_0to3;
+
+listcov <- c('MotherID','Res_0to3', 'HealthCond_before','VLow_BW', 'logBW', 'LogInc_0to3', 'LogIncAt3', 'FirstBorn', 'PPVTat3', 'HOME_Pct_0to3', 'Moth_HrsWorked_BefBirth', 'Moth_HrsWorked_Avg_0to3', 'Moth_HrsWorked_0to1',	'Father_HH_0to3', 'GMom_0to3', 'MomCare', 'RelCare', 'NonRelCare', 'Moth_Smoke_BefBirth','Alc_BefBirth','Breastfed','Doctor_0to3','Dentist_0to3','Moth_WeightChange','Illness_1stYr','Premature','Insurance_0to3','Medicaid_0to3')
+
+listkeep <- c('ChildID', 'MotherID', 'Attrit', 'Age2_Yr104', 'Black', 'NonBlack', 'Male', 'HS_90','Pre_90', 'Sample90','PIATMT_Pct', 'PIATRR_Pct', 'PPVT_Pct', 'Test_Pct', 'BPI_Pct', 'BPIAS_Pct', 'AgeTest_Yr', 'PermInc_std', 'impAFQT_std',listcov)
+
+
+
+for(i in seq(86,104,2)){
+  col_name1 <- paste('AgeTest_Yr',i,sep = '')
+  col_name2 <- paste('Test_Pct',i,sep = '')
+  col_name3 <- paste('PIATMT','_Pct',i,sep = '')
+  col_name4 <- paste('PIATRR','_Pct',i,sep = '')
+  col_name5 <- paste('PPVT','_Pct',i,sep = '')
+  col_name6 <- paste('BPI','_Pct',i,sep = '')
+  col_name7 <- paste('BPIAS','_Pct',i,sep = '')
+  
+  temp <- clean %>%
+    filter(Sample90 == 1) %>%
+    rename(AgeTest_Yr = col_name1, Test_Pct = col_name2, 
+           PIATMT_Pct = col_name3, PIATRR_Pct = col_name4, 
+           PPVT_Pct = col_name5, BPI_Pct = col_name6, 
+           BPIAS_Pct = col_name7) %>%
+    select(all_of(c(listkeep))) %>%
+    mutate(Year = i)
+  clean_long <- rbind(clean_long, temp)
+}
+
+## Add groups to clean_long
+clean_long <- clean_long %>%
+  filter(!is.na(AgeTest_Yr), !is.na(Test_Pct), 
+         AgeTest_Yr >= 5, AgeTest_Yr <= 14) %>%
+  mutate(Group_5to6=(AgeTest_Yr<7),
+         Group_7to10=(AgeTest_Yr>=7 & AgeTest_Yr<=10),
+         Group_11to14=(AgeTest_Yr>=11))
+
+## Subgroups for Table3
+for(g in c('5to6','7to10','11to14')){
+  for(test in c('PIATMT','PIATRR','PPVT')){
+    clean_long[paste(test, "_std_", g, sep = '')] <- as.numeric(NA)
+    temp = scale(clean_long[clean_long[paste("Group_", g, sep = '')] == 1,paste(test, "_Pct", sep = '')])
+		clean_long[clean_long[[paste("Group_", g, sep = '')]] == 1
+		           ,paste(test, "_std_", g, sep = '')]= temp[1:nrow(temp)]
+  }
+  temp <- rowMeans(data.frame(
+    clean_long[paste('PIATMT', "_std_", g, sep = '')],
+    clean_long[paste('PIATRR', "_std_", g, sep = '')],
+    clean_long[paste('PPVT', "_std_", g, sep = '')]),
+    na.rm = 1
+  )
+  clean_long[paste('Test', "_std_", g, sep = '')] <- scale(temp)
+}
+
+## Combine test scores into 1 column
+clean_long <- clean_long %>%
+  mutate(Test_std = ifelse(Group_5to6 == 1, Test_std_5to6,
+                           ifelse(Group_7to10 == 1, Test_std_7to10,
+                                  Test_std_11to14)),
+         Group = Group_5to6 + 2 * Group_7to10 + 3 * Group_11to14) %>%
+  mutate(HS_5to6 = Group_5to6 * HS_90,
+         HS_7to10 = Group_7to10 * HS_90,
+         HS_11to14 = Group_11to14 * HS_90,
+         Pre_5to6 = Group_5to6 * Pre_90,
+         Pre_7to10 = Group_7to10 * Pre_90,
+         Pre_11to14 = Group_11to14 * Pre_90)
+
+
+```
+
+### Table3 regression columns 1- 4
+Cluster Error in R
+```{r}
+library(sandwich)
+library(lmtest)
+#data("PetersenCL")
+#reg <- lm(y ~ x, data = PetersenCL) ## `reg` is used throughout
+#regols = coeftest(reg) ## OLS
+#regolsr = coeftest(reg, vcovCL) ## Robust std errors
+#v_year <- vcovCL(reg, cluster= ~year, type='HC1')
+#reg_year = coeftest(reg, v_year)
+```
+
+#### Column 1 - no controls
+
+xi: reg 	Test_std HS_5to6 HS_7to10 HS_11to14 Pre_5to6 Pre_7to10 Pre_11to14 
+		Male i.year Group* i.AgeTest_Yr, vce(cluster MotherID);
+		
+The results fit!
+```{r}
+## FirstBorn + factor(MotherID)
+listhsbygroup <- c('HS_5to6', 'HS_7to10', 'HS_11to14',
+                   'Pre_5to6', 'Pre_7to10', 'Pre_11to14',
+                   'Group_5to6','Group_7to10','Group_11to14')
+
+colreg <- clean_long[1:4000,] %>%
+  select(Test_std, MotherID, Male, all_of(listhsbygroup), Year, Group, AgeTest_Yr) %>%
+  lm(Test_std ~ HS_5to6 + HS_7to10 + HS_11to14 +
+       Pre_5to6 + Pre_7to10 + Pre_11to14 + factor(Year) +
+       factor(Group)*factor(AgeTest_Yr) + Male, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+round(colreg_motherid[2:7,],3)
+```
+
+#### Column 2 - Add pre-treatment covariates
+
+xi: reg Test_std 	HS_5to6 HS_7to10 HS_11to14 Pre_5to6 Pre_7to10 Pre_11to14 
+			Male i.year Group* i.AgeTest_Yr `Covariates', vce(cluster MotherID);
+			
+Covariates: Res_0to3 HealthCond_before VLow_BW logBW LogInc_0to3 LogIncAt3 FirstBorn Male Age2_Yr104 HOME_Pct_0to3 Moth_HrsWorked_BefBirth Moth_HrsWorked_0to1 Father_HH_0to3 GMom_0to3 MomCare RelCare NonRelCare Moth_Smoke_BefBirth Alc_BefBirth Breastfed Doctor_0to3 Dentist_0to3 Moth_WeightChange Illness_1stYr Premature Insurance_0to3 Medicaid_0to3 PreTreatIndex;
+
+
+Covariates with larger sample size:
+Res_0to3: Done
+HealthCond_before: Done
+VLow_BW, logBW: Done
+LogInc_0to3, LogIncAt3: Done
+FirstBorn Male : Done
+Age2_Yr104: Done
+Moth_HrsWorked_BefBirth, Moth_HrsWorked_0to1: Done
+GMom_0to3 : Done
+MomCare, RelCare, NonRelCare : Done
+Moth_Smoke_BefBirth, Alc_BefBirth : Done
+Breastfed : Done
+Moth_WeightChange : Done
+Illness_1stYr Premature : Done
+PreTreatIndex: Not done
+			
+The choice of covariates influence the result greatly!! The choice below fits the result in paper. But others give rise to huge gap(+Moth_Smoke_BefBirth is influential).
+```{r}
+colreg <- clean_long %>%
+  lm(Test_std ~ HS_5to6 + HS_7to10 + HS_11to14 +
+       Pre_5to6 + Pre_7to10 + Pre_11to14 + 
+       factor(Year) + factor(Group) + factor(AgeTest_Yr)+
+       HealthCond_before+logBW+LogInc_0to3+FirstBorn+Male+
+       Age2_Yr104+GMom_0to3+MomCare+RelCare+
+       Moth_Smoke_BefBirth+Breastfed+
+       Moth_WeightChange+Illness_1stYr, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+round(colreg_motherid[2:7,],3)
+```
+#### Column 3 - Add income, AFQT etc
+
+xi: reg Test_std 	HS_5to6 HS_7to10 HS_11to14 Pre_5to6 Pre_7to10 Pre_11to14 
+			Male PermInc_std impAFQT_std MomHS MomSomeColl 
+			i.year Group* i.AgeTest_Yr `Covariates', vce(cluster MotherID);
+			
+This result of PermInc and ImpAFQT fit! But need to add MomHS and MomSomeCol
+```{r}
+colreg <- clean_long %>%
+  lm(Test_std ~ HS_5to6 + HS_7to10 + HS_11to14 +
+       Pre_5to6 + Pre_7to10 + Pre_11to14 + 
+       factor(Year) + factor(Group) + factor(AgeTest_Yr)+
+       HealthCond_before+logBW+LogInc_0to3+FirstBorn+Male+
+       Age2_Yr104+GMom_0to3+MomCare+RelCare+
+       Moth_Smoke_BefBirth+Breastfed+
+       Moth_WeightChange+Illness_1stYr+
+       
+       PermInc_std+impAFQT_std, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+round(colreg_motherid[c(2:7,36:37),],3)
+```
+
+#### Column 4 - add family FE, without covariates
+
+xi: xtreg Test_std 	HS_5to6 HS_7to10 HS_11to14 Pre_5to6 Pre_7to10 Pre_11to14 
+				Male i.year Group* i.AgeTest_Yr, fe vce(cluster MotherID);
+
+This result fits!
+```{r}
+colreg <- clean_long %>%
+  select(Test_std, MotherID, Male, all_of(listhsbygroup), Year, Group, AgeTest_Yr) %>%
+  lm(Test_std ~ HS_5to6 + HS_7to10 + HS_11to14 +
+       Pre_5to6 + Pre_7to10 + Pre_11to14 + factor(Year) +
+       factor(Group)+factor(AgeTest_Yr) + Male + factor(MotherID), .)
+
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+round(colreg_motherid[2:7,],3)
+```
+
+
+#### Column 5 - family FE plus covariates
+xi: xtreg 	Test_std HS_5to6 HS_7to10 HS_11to14 Pre_5to6 Pre_7to10 Pre_11to14 
+		Male i.year Group* i.AgeTest_Yr `Covariates', fe vce(cluster MotherID);
+		
+The choice of covariates influence the result greatly!! The choice below fits the result in paper. But others give rise to huge gap(+Moth_Smoke_BefBirth is influential).
+
+```{r}
+colreg <- clean_long %>%
+  lm(Test_std ~ HS_5to6 + HS_7to10 + HS_11to14 +
+       Pre_5to6 + Pre_7to10 + Pre_11to14 + 
+       factor(Year) + factor(Group) + factor(AgeTest_Yr)+
+       HealthCond_before+logBW+LogInc_0to3+FirstBorn+Male+
+       Age2_Yr104+GMom_0to3+MomCare+RelCare+
+       Moth_Smoke_BefBirth+Breastfed+
+       Moth_WeightChange+Illness_1stYr+
+       factor(MotherID), .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+round(colreg_motherid[2:7,],3)
+```
+
+## Table 4 Test score by subgroup
+
+*Create subgroup categories for tables*;
+
+*Name them `x' Non`x' to facilitate the loop*;
+
+
+foreach a in 5to6 7to10 11to14 {;
+	foreach x in HS Pre {;
+		gen `x'_`a'=1 if `x'2_FE90==1 & Group_`a'==1;
+		replace `x'_`a'=0 if `x'_`a'!=1 & `x'2_FE90!=.;
+	};
+};
+
+foreach g in Male NonMale Black NonBlack lowAFQT NonlowAFQT {;
+	foreach x in HS Pre {;
+		gen `x'_`g'=1 if `x'2_FE90==1 & `g'==1;
+		replace `x'_`g'=0 if `x'_`g'!=1 & `x'2_FE90!=.;
+	};
+};
+
+foreach a in 5to6 7to10 11to14 {;
+	foreach g in Male NonMale Black NonBlack lowAFQT NonlowAFQT {;
+		foreach x in HS Pre {;
+			gen `x'_`g'_`a'=1 if `x'2_FE90==1 & `g'==1 & Group_`a'==1;
+			replace `x'_`g'_`a'=0 if `x'_`g'_`a'!=1 & `x'2_FE90!=.;
+		};
+	};
+};
+
+*Create Group5to14=1 for everyone, just to facilitate the loop*;
+### Create subgroups for Table 4
+```{r}
+
+```
+
+
+xi: xtreg Test_std 	HS_`g'_5to6 HS_`g'_7to10 HS_`g'_11to14 
+					HS_Non`g'_5to6 HS_Non`g'_7to10 HS_Non`g'_11to14 
+					Pre_`g'_5to6 Pre_`g'_7to10 Pre_`g'_11to14 
+					Pre_Non`g'_5to6 Pre_Non`g'_7to10 Pre_Non`g'_11to14 
+					Male i.Age2_Yr104 `Covariates', fe vce(cluster MotherID);
+### Start do regression
+
+#### Panel B: Race first
+	xi: xtreg Test_std 	HS_`g'_5to6 HS_`g'_7to10 HS_`g'_11to14 
+					HS_Non`g'_5to6 HS_Non`g'_7to10 HS_Non`g'_11to14 
+					Pre_`g'_5to6 Pre_`g'_7to10 Pre_`g'_11to14 
+					Pre_Non`g'_5to6 Pre_Non`g'_7to10 Pre_Non`g'_11to14 
+					Male i.Age2_Yr104 `Covariates', fe vce(cluster MotherID);
+```{r}
+## Race
+colreg <- clean_long %>%
+  mutate(HS_Black_5to6 = ifelse(Group_5to6== 1 & HS_90 == 1 & Black == 1, 1, 0),
+         HS_Black_7to10 = ifelse(Group_7to10== 1 & HS_90 == 1 & Black == 1, 1, 0),
+         HS_Black_11to14 = ifelse(Group_11to14== 1 & HS_90 == 1 & Black == 1, 1, 0),
+         HS_Black_5to14 = ifelse(HS_90 == 1 & Black == 1, 1, 0),
+         Pre_Black_5to6 = ifelse(Group_5to6== 1 & Pre_90 == 1 & Black == 1, 1, 0),
+         Pre_Black_7to10 = ifelse(Group_7to10== 1 & Pre_90 == 1 & Black == 1, 1, 0),
+         Pre_Black_11to14 = ifelse(Group_11to14== 1 & Pre_90 == 1 & Black == 1, 1, 0),
+         Pre_Black_5to14 = ifelse(Pre_90 == 1 & Black == 1, 1, 0),
+         HS_NonBlack_5to6 = ifelse(Group_5to6== 1 & HS_90 == 1 & NonBlack == 1, 1, 0),
+         HS_NonBlack_7to10 = ifelse(Group_7to10== 1 & HS_90 == 1 & NonBlack == 1, 1, 0),
+         HS_NonBlack_11to14 = ifelse(Group_11to14== 1 & HS_90 == 1 & NonBlack == 1, 1, 0),
+         HS_NonBlack_5to14 = ifelse(HS_90 == 1 & NonBlack == 1, 1, 0),
+         Pre_NonBlack_5to6 = ifelse(Group_5to6== 1 & Pre_90 == 1 & NonBlack == 1, 1, 0),
+         Pre_NonBlack_7to10 = ifelse(Group_7to10== 1 & Pre_90 == 1 & NonBlack == 1, 1, 0),
+         Pre_NonBlack_11to14 = ifelse(Group_11to14== 1 & Pre_90 == 1 & NonBlack == 1, 1, 0),
+         Pre_NonBlack_5to14 = ifelse(Pre_90 == 1 & NonBlack == 1, 1, 0)
+         ) %>%
+  lm(Test_std ~
+       HS_Black_5to6+HS_Black_7to10+HS_Black_11to14+
+       Pre_Black_5to6+Pre_Black_7to10+Pre_Black_11to14+
+       HS_NonBlack_5to6+HS_NonBlack_7to10+HS_NonBlack_11to14+
+       Pre_NonBlack_5to6+ Pre_NonBlack_7to10+Pre_NonBlack_11to14+
+
+       #Res_0to3+logBW+LogInc_0to3+FirstBorn+Male+       Age2_Yr104+
+       
+       factor(MotherID), .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(2:4,8:10),],3)
+```
+
+Overall age group effect
+```{r}
+clean_long <- clean_long %>%
+  mutate(HS_Black = ifelse(HS_90 == 1 & Black == 1, 1, 0),
+         Pre_Black = ifelse(Pre_90 == 1 & Black == 1, 1, 0),
+         HS_NonBlack = ifelse(HS_90 == 1 & NonBlack == 1, 1, 0),
+         Pre_NonBlack = ifelse(Pre_90 == 1 & NonBlack == 1, 1, 0)
+         ) 
+colreg <- clean_long %>%
+  lm(Test_std ~
+       HS_Black+Pre_Black+HS_NonBlack+Pre_NonBlack+
+       
+       #Res_0to3+logBW+LogInc_0to3+FirstBorn+Male+       Age2_Yr104+
+       
+       factor(MotherID), .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(2,4),],3)
+```
+
+
+#### Panel C: Gender
+```{r}
+colreg <- clean_long %>%
+  mutate(NonMale = Male == 0) %>%
+  mutate(HS_Male_5to6 = ifelse(Group_5to6== 1 & HS_90 == 1 & Male == 1, 1, 0),
+         HS_Male_7to10 = ifelse(Group_7to10== 1 & HS_90 == 1 & Male == 1, 1, 0),
+         HS_Male_11to14 = ifelse(Group_11to14== 1 & HS_90 == 1 & Male == 1, 1, 0),
+         HS_Male_5to14 = ifelse(HS_90 == 1 & Male == 1, 1, 0),
+         Pre_Male_5to6 = ifelse(Group_5to6== 1 & Pre_90 == 1 & Male == 1, 1, 0),
+         Pre_Male_7to10 = ifelse(Group_7to10== 1 & Pre_90 == 1 & Male == 1, 1, 0),
+         Pre_Male_11to14 = ifelse(Group_11to14== 1 & Pre_90 == 1 & Male == 1, 1, 0),
+         Pre_Male_5to14 = ifelse(Pre_90 == 1 & Male == 1, 1, 0),
+         HS_NonMale_5to6 = ifelse(Group_5to6== 1 & HS_90 == 1 & NonMale == 1, 1, 0),
+         HS_NonMale_7to10 = ifelse(Group_7to10== 1 & HS_90 == 1 & NonMale == 1, 1, 0),
+         HS_NonMale_11to14 = ifelse(Group_11to14== 1 & HS_90 == 1 & NonMale == 1, 1, 0),
+         HS_NonMale_5to14 = ifelse(HS_90 == 1 & NonMale == 1, 1, 0),
+         Pre_NonMale_5to6 = ifelse(Group_5to6== 1 & Pre_90 == 1 & NonMale == 1, 1, 0),
+         Pre_NonMale_7to10 = ifelse(Group_7to10== 1 & Pre_90 == 1 & NonMale == 1, 1, 0),
+         Pre_NonMale_11to14 = ifelse(Group_11to14== 1 & Pre_90 == 1 & NonMale == 1, 1, 0),
+         Pre_NonMale_5to14 = ifelse(Pre_90 == 1 & NonMale == 1, 1, 0)
+         ) %>%
+  lm(Test_std ~
+       HS_Male_5to6+HS_Male_7to10+HS_Male_11to14+
+       Pre_Male_5to6+Pre_Male_7to10+Pre_Male_11to14+
+       HS_NonMale_5to6+HS_NonMale_7to10+HS_NonMale_11to14+
+       Pre_NonMale_5to6+ Pre_NonMale_7to10+Pre_NonMale_11to14+
+
+       #Res_0to3+logBW+LogInc_0to3+FirstBorn+Male+       Age2_Yr104+
+       
+       factor(MotherID) - 1, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(1:3,7:9),],3)
+```
+
+Overall age group effect
+```{r}
+clean_long <- clean_long %>%
+  mutate(NonMale = Male == 0) %>%
+  mutate(HS_Male = ifelse(HS_90 == 1 & Male == 1, 1, 0),
+         Pre_Male = ifelse(Pre_90 == 1 & Male == 1, 1, 0),
+         HS_NonMale = ifelse(HS_90 == 1 & NonMale == 1, 1, 0),
+         Pre_NonMale = ifelse(Pre_90 == 1 & NonMale == 1, 1, 0)
+         ) 
+colreg <- clean_long %>%
+  lm(Test_std ~
+       HS_Male+Pre_Male+HS_NonMale+Pre_NonMale+
+       
+       #Res_0to3+logBW+LogInc_0to3+FirstBorn+Male+       Age2_Yr104+
+       
+       factor(MotherID) - 1, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(1,3),],3)
+```
+
+
+#### Panel D: AFQT Score
+```{r}
+clean_long <- clean_long %>%
+  mutate(lowAFQT = impAFQT_std<=-1) %>%
+  mutate(NonlowAFQT = lowAFQT == 0)
+colreg <-  clean_long %>%
+  mutate(HS_lowAFQT_5to6 = ifelse(Group_5to6== 1 & HS_90 == 1 & lowAFQT == 1, 1, 0),
+         HS_lowAFQT_7to10 = ifelse(Group_7to10== 1 & HS_90 == 1 & lowAFQT == 1, 1, 0),
+         HS_lowAFQT_11to14 = ifelse(Group_11to14== 1 & HS_90 == 1 & lowAFQT == 1, 1, 0),
+         HS_lowAFQT_5to14 = ifelse(HS_90 == 1 & lowAFQT == 1, 1, 0),
+         Pre_lowAFQT_5to6 = ifelse(Group_5to6== 1 & Pre_90 == 1 & lowAFQT == 1, 1, 0),
+         Pre_lowAFQT_7to10 = ifelse(Group_7to10== 1 & Pre_90 == 1 & lowAFQT == 1, 1, 0),
+         Pre_lowAFQT_11to14 = ifelse(Group_11to14== 1 & Pre_90 == 1 & lowAFQT == 1, 1, 0),
+         Pre_lowAFQT_5to14 = ifelse(Pre_90 == 1 & lowAFQT == 1, 1, 0),
+         HS_NonlowAFQT_5to6 = ifelse(Group_5to6== 1 & HS_90 == 1 & NonlowAFQT == 1, 1, 0),
+         HS_NonlowAFQT_7to10 = ifelse(Group_7to10== 1 & HS_90 == 1 & NonlowAFQT == 1, 1, 0),
+         HS_NonlowAFQT_11to14 = ifelse(Group_11to14== 1 & HS_90 == 1 & NonlowAFQT == 1, 1, 0),
+         HS_NonlowAFQT_5to14 = ifelse(HS_90 == 1 & NonlowAFQT == 1, 1, 0),
+         Pre_NonlowAFQT_5to6 = ifelse(Group_5to6== 1 & Pre_90 == 1 & NonlowAFQT == 1, 1, 0),
+         Pre_NonlowAFQT_7to10 = ifelse(Group_7to10== 1 & Pre_90 == 1 & NonlowAFQT == 1, 1, 0),
+         Pre_NonlowAFQT_11to14 = ifelse(Group_11to14== 1 & Pre_90 == 1 & NonlowAFQT == 1, 1, 0),
+         Pre_NonlowAFQT_5to14 = ifelse(Pre_90 == 1 & NonlowAFQT == 1, 1, 0)
+         ) %>%
+  lm(Test_std ~
+       HS_lowAFQT_5to6+HS_lowAFQT_7to10+HS_lowAFQT_11to14+
+       Pre_lowAFQT_5to6+Pre_lowAFQT_7to10+Pre_lowAFQT_11to14+
+       HS_NonlowAFQT_5to6+HS_NonlowAFQT_7to10+HS_NonlowAFQT_11to14+
+       Pre_NonlowAFQT_5to6+ Pre_NonlowAFQT_7to10+Pre_NonlowAFQT_11to14+
+       #HS_90 * lowAFQT * Group_5to6 + HS_90 * lowAFQT * Group_7to10 +
+       #Pre_90 * lowAFQT * Group_5to6 + Pre_90 * lowAFQT * Group_7to10 +
+       
+       factor(MotherID) - 1, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(1:3,7:9),],3)
+```
+
+Overall age group effect
+```{r}
+clean_long <- clean_long %>%
+  mutate(HS_lowAFQT = ifelse(HS_90 == 1 & lowAFQT == 1, 1, 0),
+         Pre_lowAFQT = ifelse(Pre_90 == 1 & lowAFQT == 1, 1, 0),
+         HS_NonlowAFQT = ifelse(HS_90 == 1 & NonlowAFQT == 1, 1, 0),
+         Pre_NonlowAFQT = ifelse(Pre_90 == 1 & NonlowAFQT == 1, 1, 0)
+         )
+colreg <- clean_long %>%
+  lm(Test_std ~
+       HS_lowAFQT+Pre_lowAFQT+HS_NonlowAFQT+Pre_NonlowAFQT+
+       #Res_0to3+HealthCond_before+logBW+LogInc_0to3+FirstBorn+Male+       Age2_Yr104+GMom_0to3+MomCare+RelCare+       Moth_Smoke_BefBirth+Breastfed+       Moth_WeightChange+Illness_1stYr+Premature+
+       factor(MotherID) - 1, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(1,3),],3)
+```
+
+### Non-Test score
+
+#### Grade repetition and learning disabilities
+
+*Fix random error first*;
+replace Repeat92=. if Repeat92==6;
+```{r}
+clean <- clean %>%
+  mutate(Repeat92 = ifelse(Repeat92 == 6, NA, Repeat92))
+```
+*Create yearly indicators, then take the max across years to get "ever repeat" and "ever LD" measures*;
+
+*Note that, particulary for Repeat, some kids are already too old by the 1st survey year, so data is missing for them*;
+
+egen Repeat94=rowmax( 	Repeat_K94 Repeat_194 Repeat_294 Repeat_394 Repeat_494 Repeat_594 Repeat_694 Repeat_794 Repeat_894);
+egen Repeat96=rowmax( 	Repeat_K96 Repeat_196 Repeat_296 Repeat_396 Repeat_496 Repeat_596 Repeat_696 Repeat_796 Repeat_896 
+				Repeat_996 Repeat_1096 Repeat_1196 Repeat_1296);
+replace Repeat94=0 if Repeat_None94==1 & Repeat94!=1;
+replace Repeat96=0 if Repeat_None96==1 & Repeat96!=1;
+rename Repeat_None98 RepeatNone98;
+drop Repeat_YA98;
+foreach var of varlist Repeat_*98 {;
+	gen byte `var'_temp=1 if `var'==1;
+};
+egen Repeat98=rowmax(Repeat_*98_temp);
+replace Repeat98=0 if RepeatNone98==1;
+drop Repeat*temp;
+
+egen Repeat=rowmax(Repeat88 Repeat90 Repeat92 Repeat94 Repeat96 Repeat98 Repeat100 Repeat102 Repeat104);
+
+```{r}
+  x = 'Repeat94'
+  clean[x] <- as.numeric(NA)
+  colnum <- which(colnames(clean) == x)
+  colnums <- which(colnames(clean) %in% c('Repeat_K94', 'Repeat_194', 'Repeat_294', 'Repeat_394', 'Repeat_494', 'Repeat_594', 'Repeat_694', 'Repeat_794', 'Repeat_894'))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+  
+    x = 'Repeat96'
+  clean[x] <- as.numeric(NA)
+  colnum <- which(colnames(clean) == x)
+  colnums <- which(colnames(clean) %in% c('Repeat_K96', 'Repeat_196', 'Repeat_296', 'Repeat_396', 'Repeat_496', 'Repeat_596', 'Repeat_696', 'Repeat_796', 'Repeat_896','Repeat_996','Repeat_1096', 'Repeat_1196', 'Repeat_1296'))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+  
+      x = 'Repeat98'
+  clean[x] <- as.numeric(NA)
+  colnum <- which(colnames(clean) == x)
+  colnums <- which(colnames(clean) %in% c('Repeat_K98', 'Repeat_198', 'Repeat_298', 'Repeat_398', 'Repeat_498', 'Repeat_598', 'Repeat_698', 'Repeat_798', 'Repeat_898'))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+  
+  clean <- clean %>%
+    mutate(Repeat94=ifelse(Repeat_None94==1 & Repeat94!=1, 0, Repeat94),
+           Repeat96=ifelse(Repeat_None94==1 & Repeat96!=1, 0, Repeat96),
+           Repeat98=ifelse(Repeat_None94==1 & Repeat98!=1, 0, Repeat98)
+    )
+  
+        x = 'Repeat'
+  clean[x] <- as.numeric(NA)
+  colnum <- which(colnames(clean) == x)
+  colnums <- which(colnames(clean) %in% c('Repeat88','Repeat90','Repeat92','Repeat94','Repeat96','Repeat98','Repeat100','Repeat102','Repeat104'))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+  
+  table(clean$Repeat)
+```
+
+forvalues x = 86(2)100 {;
+	gen tempLD`x'=LD`x';
+	replace tempLD`x'=0 if HealthCond`x'!=. & tempLD`x'!=1;
+};
+egen LD=rowmax(tempLD*);
+
+#### LD: A lot of missing data for this
+```{r}
+clean <- clean %>%
+  mutate(tempLD86 = LD86, 
+         tempLD86 = ifelse(!is.na(HealthCond86) & tempLD86!=1, 0,tempLD86),
+         tempLD88 = LD88, 
+         tempLD88 = ifelse(!is.na(HealthCond88) & tempLD88!=1, 0, tempLD88),
+         tempLD90 = LD90, 
+         tempLD90 = ifelse(!is.na(HealthCond90) & tempLD90!=1, 0, tempLD90),
+         tempLD92 = LD92, 
+         tempLD92 = ifelse(!is.na(HealthCond92) & tempLD92!=1, 0, tempLD92),
+         tempLD94 = LD94, 
+         tempLD94 = ifelse(!is.na(HealthCond94) & tempLD94!=1, 0, tempLD94),
+         tempLD96 = LD96, 
+         tempLD96 = ifelse(!is.na(HealthCond96) & tempLD96!=1, 0, tempLD96),
+         tempLD98 = LD98, 
+         tempLD98 = ifelse(!is.na(HealthCond98) & tempLD98!=1, 0, tempLD98),
+         tempLD100 = LD100, 
+         tempLD100 = ifelse(!is.na(HealthCond100) & tempLD100!=1, 0, tempLD100))
+
+    x = 'LD'
+  clean[x] <- as.numeric(NA)
+  #colnum <- which(colnames(clean) == x)
+  colnums <- which(colnames(clean) %in% c('tempLD86','tempLD88','tempLD90','tempLD92','tempLD94','tempLD96','tempLD98','tempLD100'))
+  colnums <- which(colnames(clean) %in% c('LD86','LD88','LD90','LD92','LD94','LD96','LD98','LD100'))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+```
+
+*Want to exclude small number of kids that were diagnosed with an LD before age 5*;
+
+gen LD_before=.;
+forvalues x =86(2)100  {;
+	replace LD_before=1 if tempLD`x'==1 & Age2_Yr`x'<5;
+};
+replace LD=. if LD_before==1;
+drop temp*;
+```{r}
+clean <- clean %>%
+  mutate(LD_before=as.numeric(NA))%>%
+  mutate(LD_before=ifelse(tempLD86==1 & Age2_Yr86<5, 1, LD_before),
+         LD_before=ifelse(tempLD88==1 & Age2_Yr88<5, 1, LD_before),
+         LD_before=ifelse(tempLD90==1 & Age2_Yr90<5, 1, LD_before),
+         LD_before=ifelse(tempLD92==1 & Age2_Yr92<5, 1, LD_before),
+         LD_before=ifelse(tempLD94==1 & Age2_Yr94<5, 1, LD_before),
+         LD_before=ifelse(tempLD96==1 & Age2_Yr96<5, 1, LD_before),
+         LD_before=ifelse(tempLD98==1 & Age2_Yr98<5, 1, LD_before),
+         LD_before=ifelse(tempLD100==1 & Age2_Yr100<5, 1, LD_before)) %>%
+  mutate(LD = ifelse(!is.na(LD_before) & LD_before == 1, NA, LD))
+
+table(clean$LD)
+```
+
+## Table 5
+
+We preserved the previous clean (non-long dataset) before Table 4, now go back to clean.
+
+### Compute covariates
+
+*Long-Term Outcomes - High School Graduation, College Attendance, Idle, Crime, Teen Parenthood, Health Status*;
+
+*Code educational attainment outcomes using the recoded and cleaned variable YA_Educ, rather than other measures*;
+*Other measures are sometimes only reported if the respondent answers yes or no certain screener questions*;
+
+#### HS Graduation, with and without GED
+```{r}
+clean <- clean %>%
+  mutate(HSGrad = ifelse(YA_Educ104>=12, 1, 0)) %>%
+  mutate(HSGrad = ifelse(is.na(YA_Educ104), NA, HSGrad)) %>%
+  mutate(GED = as.numeric(NA))
+
+colnum <- which(colnames(clean) == "GED")
+colnums <- which(colnames(clean) %in% c("GED94","GED96","GED98","GED100","GED102","GED104"))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+
+clean <- clean %>%
+  mutate(HSGrad_GED = HSGrad) %>%
+  mutate(HSGrad_GED = ifelse(HSGrad_GED == 1 & GED == 2, NA, HSGrad_GED))
+```
+
+#### At least one year of college attempted
+```{r}
+clean <- clean %>% mutate(HighGradeAtt = as.numeric(NA))
+colnum <- which(colnames(clean) == "HighGradeAtt")
+colnums <- which(colnames(clean) %in% c("HighGradeAtt94","HighGradeAtt96","HighGradeAtt98",
+                                        "HighGradeAtt100","HighGradeAtt102","HighGradeAtt104"))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+
+clean <- clean %>%
+  mutate(someCollAtt = ifelse(YA_Educ104>=13, 1, 0)) %>%
+  mutate(someCollAtt = ifelse(HighGradeAtt>12, 1, someCollAtt))
+```
+
+#### Idle: Labor Force Participation
+*Define "Idle" as Not in school AND zero wages in 2004 or most recent interview year*;
+
+gen Wages=Wages104;
+replace Wages=Wages102 if Wages==. & YA_LastInterview==2002;
+replace Wages=Wages100 if Wages==. & YA_LastInterview==2000;
+replace Wages=Wages98 if Wages==. & YA_LastInterview==1998;
+replace Wages=Wages96 if Wages==. & YA_LastInterview==1996;
+replace Wages=Wages94 if Wages==. & YA_LastInterview==1994;
+foreach x in 104 102 100 98 96 94 {;
+gen PosWages`x'=Wages`x'>0 & Wages`x'!=.;
+replace PosWages`x'=. if Wages`x'==.;
+};
+
+```{r}
+clean <- clean %>%
+  mutate(Wages=Wages104,
+         Wages=ifelse(is.na(Wages) & YA_LastInterview==2002, Wages102,Wages),
+         Wages=ifelse(is.na(Wages) & YA_LastInterview==2000, Wages100,Wages),
+         Wages=ifelse(is.na(Wages) & YA_LastInterview==1998, Wages98,Wages),
+         Wages=ifelse(is.na(Wages) & YA_LastInterview==1996, Wages96,Wages),
+         Wages=ifelse(is.na(Wages) & YA_LastInterview==1994, Wages94,Wages),
+         PosWages94=ifelse(Wages94>0,1,0),
+         PosWages96=ifelse(Wages96>0,1,0),
+         PosWages98=ifelse(Wages98>0,1,0),
+         PosWages100=ifelse(Wages100>0,1,0),
+         PosWages102=ifelse(Wages102>0,1,0),
+         PosWages104=ifelse(Wages104>0,1,0)
+  )
+```
+
+*If respondent did not know wages, but did report an estimate, code as 0 for lowest estimated category and 1 for all others*;
+gen PosWages=PosWages104;
+replace PosWages=0 if PosWages104==. & Wages_Est104==1;
+replace PosWages=1 if PosWages104==. & Wages_Est104!=. & Wages_Est104>1;
+replace PosWages=PosWages102 if PosWages==. & YA_LastInterview==2002;
+replace PosWages=0 if PosWages==. & PosWages102==. & Wages_Est102==1 & YA_LastInterview==2002;
+replace PosWages=1 if PosWages==. & PosWages102==. & Wages_Est102!=. & Wages_Est102>1;
+replace PosWages=PosWages100 if PosWages==. & YA_LastInterview==2000;
+replace PosWages=0 if PosWages==. & PosWages100==. & Wages_Est100==1 & YA_LastInterview==2000;
+replace PosWages=1 if PosWages==. & PosWages100==. & Wages_Est100!=. & Wages_Est100>1;
+```{r}
+clean <- clean %>%
+  mutate(PosWages = PosWages104) %>%
+  mutate(PosWages = ifelse(is.na(PosWages104) & !is.na(Wages_Est104) & Wages_Est104==1, 0, PosWages)) %>%
+  mutate(PosWages = ifelse(is.na(PosWages104) & !is.na(Wages_Est104) & Wages_Est104>1, 1, PosWages),
+         PosWages = ifelse(is.na(PosWages) & YA_LastInterview==2002,PosWages102, PosWages),
+         PosWages = ifelse(is.na(PosWages) & is.na(PosWages102) & !is.na(Wages_Est102) & Wages_Est102==1 & YA_LastInterview==2002, 0, PosWages),
+         PosWages = ifelse(is.na(PosWages) & is.na(PosWages102) & !is.na(Wages_Est102) & Wages_Est102>1, 1, PosWages),
+         PosWages = ifelse(is.na(PosWages) & YA_LastInterview==2000,PosWages100, PosWages),
+         PosWages = ifelse(is.na(PosWages) & is.na(PosWages100) & !is.na(Wages_Est100) & Wages_Est100==1 & YA_LastInterview==2000, 0, PosWages),
+         PosWages = ifelse(is.na(PosWages) & is.na(PosWages100) & !is.na(Wages_Est100) & Wages_Est100>1, 1, PosWages)
+         )
+```
+
+*There is no "estimate" code for earlier years*;
+
+replace PosWages=PosWages98 if PosWages==. & YA_LastInterview==1998;
+replace PosWages=PosWages96 if PosWages==. & YA_LastInterview==1996;
+replace PosWages=PosWages94 if PosWages==. & YA_LastInterview==1994;
+
+gen InSchool=InSchool104;
+replace InSchool=InSchool102 if InSchool==. & YA_LastInterview==2002;
+replace InSchool=InSchool100 if InSchool==. & YA_LastInterview==2000;
+replace InSchool=InSchool98 if InSchool==. & YA_LastInterview==1998;
+replace InSchool=InSchool96 if InSchool==. & YA_LastInterview==1996;
+replace InSchool=InSchool94 if InSchool==. & YA_LastInterview==1994;
+
+gen Idle=1 if InSchool==0 & PosWages==0;
+replace Idle=0 if Idle!=1 & InSchool!=.;
+
+```{r}
+clean <- clean %>%
+  mutate(PosWages = ifelse(is.na(PosWages) & YA_LastInterview==1998,PosWages98, PosWages),
+         PosWages = ifelse(is.na(PosWages) & YA_LastInterview==1996,PosWages96, PosWages),
+         PosWages = ifelse(is.na(PosWages) & YA_LastInterview==1994,PosWages94, PosWages)) %>%
+  mutate(InSchool = InSchool104,
+         InSchool = ifelse(is.na(InSchool) & YA_LastInterview==2002,InSchool102, InSchool),
+         InSchool = ifelse(is.na(InSchool) & YA_LastInterview==2000,InSchool100, InSchool),
+         InSchool = ifelse(is.na(InSchool) & YA_LastInterview==1998,InSchool98, InSchool),
+         InSchool = ifelse(is.na(InSchool) & YA_LastInterview==1996,InSchool96, InSchool),
+         InSchool = ifelse(is.na(InSchool) & YA_LastInterview==1994,InSchool94, InSchool))%>%
+  
+  mutate(Idle=ifelse(InSchool == 0 & PosWages == 0, 1, 0)) %>%
+  mutate(Idle = ifelse(Idle != 1 & !is.na(InSchool), 0, Idle))
+
+```
+
+#### Crime
+- Ever convicted, been on probation, sentenced or in jail at time of interview
+```{r}
+listofvar <- c('Convicted','Probation','Sentenced')
+for(x in listofvar){
+  clean[x] <- as.numeric(NA)
+colnum <- which(colnames(clean) == x)
+colnums <- seq(from = which(colnames(clean) == paste(x,94,sep = "")), by = 1, length.out = 6)
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+}
+
+for(x in seq(94,104,2)){
+  newcol_name1 <- paste('Prison',x,sep = '')
+  col_name1 <- paste('Resid',x,sep = '')
+  clean[newcol_name1] <- ifelse(clean[col_name1] == 5, 1, 0)
+  clean[newcol_name1] <- ifelse(!is.na(clean[col_name1]) & clean[newcol_name1] != 1, 0, clean[[newcol_name1]])
+}
+
+  x = 'Prison'
+  clean[x] <- as.numeric(NA)
+  colnum <- which(colnames(clean) == x)
+  colnums <- seq(from = which(colnames(clean) == paste(x,94,sep = "")), by = 1, length.out = 6)
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+
+  x = 'Crime'
+  clean[x] <- as.numeric(NA)
+  colnum <- which(colnames(clean) == x)
+  colnums <- which(colnames(clean) %in% c('Convicted', 'Probation', 'Sentenced', 'Prison'))
+for(i in 1:nrow(clean)){
+  suppressWarnings(clean[i,colnum] <- max(clean[i,colnums], na.rm = T))
+  if(clean[i,colnum] == -Inf){
+    clean[i,colnum] <- NA
+  }
+}
+  
+table(clean$Crime)
+```
+#### Teen Parenthood
+
+gen TeenPreg=1 if Ageat1stBirth<20;
+replace TeenPreg=0 if TeenPreg!=1 & YA_NumKids!=.;
+```{r}
+clean <- clean %>%
+  mutate(TeenPreg = ifelse(Ageat1stBirth<20, 1, NA)) %>%
+  mutate(TeenPreg = ifelse(!is.na(YA_NumKids) & is.na(TeenPreg), 0, TeenPreg))
+
+table(clean$TeenPreg)
+```
+
+
+#### Poor Health - Self-reported status
+
+egen HealthReport=rowmean(Health_Report*);
+gen PoorHealth=1 if HealthReport<3 & HealthReport!=.;
+replace PoorHealth=0 if HealthReport!=. & PoorHealth!=1;
+```{r}
+colnum <- which(colnames(clean) == 'Health_Report94')
+clean <- clean %>%
+  mutate(HealthReport = rowMeans(clean[,seq(colnum, colnum+5,1)], na.rm = T)) %>%
+  mutate(PoorHealth = ifelse(HealthReport<3, 1, NA)) %>%
+  mutate(PoorHealth = ifelse(!is.na(HealthReport) & PoorHealth != 1, 0, PoorHealth))
+```
+
+
+### Regression for Table 5
+There are so many missing values in  Repeat LD HSGrad HSGrad_GED<<<<
+
+
+foreach o in Repeat LD HSGrad HSGrad_GED someColl Idle Crime TeenPreg PoorHealth {;
+	foreach g in Black Male lowAFQT {;
+		xi: xtreg `o' 	HS_`g' HS_Non`g' Pre_`g' Pre_Non`g' 
+					Male i.Age2_Yr104 `Covariates' if Sample90_2==1, fe vce(cluster MotherID);
+
+#### Race
+```{r}
+clean <- clean %>%
+  mutate(HS_Black = ifelse(HS_90 == 1 & Black == 1, 1, 0),
+         Pre_Black = ifelse(Pre_90 == 1 & Black == 1, 1, 0),
+         HS_NonBlack = ifelse(HS_90 == 1 & NonBlack == 1, 1, 0),
+         Pre_NonBlack = ifelse(Pre_90 == 1 & NonBlack == 1, 1, 0)
+         ) 
+colreg <- clean %>%
+  filter(Sample90 == 1) %>%
+  lm(PoorHealth ~
+       HS_Black+Pre_Black+HS_NonBlack+Pre_NonBlack+
+       
+       #logBW+LogInc_0to3+FirstBorn+Male+
+       
+       as.factor(Age2_Yr104)+factor(MotherID), .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(colreg_motherid[c(2,4),],3)
+```
+
+#### Gender
+```{r}
+clean <- clean %>%
+  mutate(NonMale = Male == 0) %>%
+  mutate(HS_Male = ifelse(HS_90 == 1 & Male == 1, 1, 0),
+         Pre_Male = ifelse(Pre_90 == 1 & Male == 1, 1, 0),
+         HS_NonMale = ifelse(HS_90 == 1 & NonMale == 1, 1, 0),
+         Pre_NonMale = ifelse(Pre_90 == 1 & NonMale == 1, 1, 0)
+         ) 
+colreg <- clean %>%
+  filter(Sample90 == 1) %>%
+  lm(Idle ~
+       HS_Male+Pre_Male+HS_NonMale+Pre_NonMale+
+       Male+as.factor(Age2_Yr104)+
+       #Res_0to3+logBW+LogInc_0to3+FirstBorn+
+       factor(MotherID) - 1, .)
+v_motherid <- vcovCL(colreg, cluster= ~MotherID, type='HC1')
+colreg_motherid = coeftest(colreg, v_motherid)
+#round(colreg_motherid[c(2:5,119:128),],3)
+round(summary(colreg)$coef[c(1,3),],3)
+round(colreg_motherid[c(1,3),],3)
+```
+
+
+## Robustness Check
+
+## Re-analysis
+
+I will mainly use IPW
+#### IPW
+```{r}
+## Group 5-6 Effect
+Temp <- clean_long %>%
+  filter(Group_5to6 == 1) %>%
+  select(Test_std, MotherID, Male, Year, Group, AgeTest_Yr, HS_90, Pre_90)
+
+### Column 1
+z <- Temp$HS_90
+y <- Temp$Test_std
+pscore <- glm(HS_90 ~ factor(Year) + factor(AgeTest_Yr) + Male , family = binomial, Temp)$fitted.values
+ace.ipw_hs = mean ( z * y / pscore ) / mean ( z / pscore ) -
+  mean ((1 - z ) * y / (1 - pscore )) / mean ((1 - z ) / (1 - pscore ));ace.ipw_hs
+pscore <- glm(Pre_90 ~ factor(Year) + factor(AgeTest_Yr) + Male , family = binomial, Temp)$fitted.values
+ace.ipw_pre = mean ( z * y / pscore ) / mean ( z / pscore ) -
+  mean ((1 - z ) * y / (1 - pscore )) / mean ((1 - z ) / (1 - pscore ));ace.ipw_pre
+
+### Column 4
+z <- Temp$HS_90
+y <- Temp$Test_std
+pscore <- glm(HS_90 ~ factor(Year) + factor(AgeTest_Yr) + Male + factor(MotherID) , family = binomial, Temp)$fitted.values
+ace.ipw_hs = mean ( z * y / pscore ) / mean ( z / pscore ) -
+  mean ((1 - z ) * y / (1 - pscore )) / mean ((1 - z ) / (1 - pscore ));ace.ipw_hs
+pscore <- glm(Pre_90 ~ factor(Year) + factor(AgeTest_Yr) + Male + factor(MotherID) , family = binomial, Temp)$fitted.values
+ace.ipw_pre = mean ( z * y / pscore ) / mean ( z / pscore ) -
+  mean ((1 - z ) * y / (1 - pscore )) / mean ((1 - z ) / (1 - pscore ));ace.ipw_pre
+```
+
