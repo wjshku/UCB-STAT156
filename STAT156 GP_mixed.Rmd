@@ -501,9 +501,9 @@ fereg$coefficients[1:3]
 
 #### Calculate Sample90
 ```{r}
-#Should not use HS_FE90, instead I use PreK_
+#Should not use HS_FE90, instead I use PreK_FE
 clean <- clean %>% 
-  mutate(Sample90 = ifelse((PreK_FE == 1) & 
+  mutate(Sample90 = ifelse((!is.na(PreK_FE)) & 
                              ((SampleID != 12 & !is.na(Attrit) & Attrit == 0 & !is.na(Age_Mo104) & Age_Mo104 >= 19*12) 
                               |(Attrit == 0 & !is.na(Attrit) & DOB_Yr_Child == 1985 & DOB_Mo_Child < 8)) 
                              , 1, 0))
@@ -513,7 +513,11 @@ clean <- clean %>%
   mutate(NotThree = (!is.na(Age_1stHS88) && Age_1stHS88 > 3) 
          || (!is.na(Age_1stHS90) && Age_1stHS90 > 3)) %>%
   mutate(HS_3 = ifelse((Three == 1), 1, ifelse(NotThree == 1, 2, 0))) %>%
-  mutate(PreK_FE_3 = ifelse(PreK_FE == 1 & HS_3 == 1, 0, PreK_FE))
+  mutate(PreK_FE_3 = ifelse(!is.na(PreK_FE) & HS_3 == 1, 0, PreK_FE))
+
+clean %>% 
+  filter(Sample90 == 1) %>%
+  nrow()
 ```
 
 #### Male & FirstBorn
@@ -882,7 +886,7 @@ PreTreatIndex: Not done
 ```{r}
 ## Attrit
 fereg <- clean %>% 
-  filter((PreK_FE == 1) & SampleID!=12 & (Age_Mo104>=19*12 | (DOB_Yr_Child==1985 & DOB_Mo_Child<9))) %>%
+  filter((!is.na(PreK_FE)) & SampleID!=12 & (Age_Mo104>=19*12 | (DOB_Yr_Child==1985 & DOB_Mo_Child<9))) %>%
   select(Attrit, MotherID, HS_90, Pre_90, Male, FirstBorn, Age_Mo90) %>%
   lm(Attrit ~ HS_90 + Pre_90 + factor(MotherID), .)
 fereg$coefficients[1:3]
