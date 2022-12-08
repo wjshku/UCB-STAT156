@@ -272,21 +272,54 @@ clean <- clean %>%
          FirstBorn = BirthOrder==1) %>% mutate(FirstBorn= ifelse(is.na(BirthOrder), NA, FirstBorn))
 ```
 
-#### HighGrade_Moth
---> code? varlist?
+#### HighGrade_Moth: MothED
+```{r}
+clean= clean %>% mutate(HighGrade_Moth79= ifelse(HighGrade_Moth79==95, NA, HighGrade_Moth79),
+  HighGrade_Moth80= ifelse(HighGrade_Moth80==95, NA, HighGrade_Moth80),
+  HighGrade_Moth81= ifelse(HighGrade_Moth81==95, NA, HighGrade_Moth81),
+  HighGrade_Moth82= ifelse(HighGrade_Moth82==95, NA, HighGrade_Moth82),
+  HighGrade_Moth83= ifelse(HighGrade_Moth83==95, NA, HighGrade_Moth84),
+  HighGrade_Moth84= ifelse(HighGrade_Moth84==95, NA, HighGrade_Moth84),
+  HighGrade_Moth85= ifelse(HighGrade_Moth85==95, NA, HighGrade_Moth85),
+  HighGrade_Moth86= ifelse(HighGrade_Moth86==95, NA, HighGrade_Moth86),
+  HighGrade_Moth87= ifelse(HighGrade_Moth87==95, NA, HighGrade_Moth87),
+  HighGrade_Moth88= ifelse(HighGrade_Moth88==95, NA, HighGrade_Moth88),
+  HighGrade_Moth89= ifelse(HighGrade_Moth89==95, NA, HighGrade_Moth89),
+  HighGrade_Moth90= ifelse(HighGrade_Moth90==95, NA, HighGrade_Moth90),
+  HighGrade_Moth91= ifelse(HighGrade_Moth91==95, NA, HighGrade_Moth91),
+  HighGrade_Moth92= ifelse(HighGrade_Moth92==95, NA, HighGrade_Moth92),
+  HighGrade_Moth93= ifelse(HighGrade_Moth93==95, NA, HighGrade_Moth93),
+  HighGrade_Moth94= ifelse(HighGrade_Moth94==95, NA, HighGrade_Moth94),
+  HighGrade_Moth96= ifelse(HighGrade_Moth96==95, NA, HighGrade_Moth96),
+  HighGrade_Moth98= ifelse(HighGrade_Moth98==95, NA, HighGrade_Moth98),
+  HighGrade_Moth100= ifelse(HighGrade_Moth100==95, NA, HighGrade_Moth100),
+  HighGrade_Moth102= ifelse(HighGrade_Moth102==95, NA, HighGrade_Moth102),
+  HighGrade_Moth104= ifelse(HighGrade_Moth104==95, NA, HighGrade_Moth104))
 
-clean$high
-foreach var of varlist HighGrade_Moth* 
-mutate(var=ifelse(var==95, NA, var))
+#which(colnames(clean)== "HighGrade_Moth79")
+#which(colnames(clean)== "HighGrade_Moth102")
+#which(colnames(clean)== "HighGrade_Moth104")
+
+clean = clean %>% mutate(MothED=rowMaxs(as.matrix(clean[, c(402:422)])))
+
+                         
+clean = clean %>% mutate(MomDropout= ifelse(MothED<12, MothED, NA)) %>% mutate(MomDropout= ifelse(is.na(MothED), NA, MomDropout)) %>% mutate(MomHS= ifelse(MothED==12, MothED, NA)) %>% mutate(MomHS=ifelse(is.na(MothED), NA, MothED)) %>% mutate(MomSomeColl= ifelse(MothED>=13 && !is.na(MothED), MothED, NA)) %>% mutate(MomSomeColl= ifelse(is.na(MothED), NA, MomSomeColl))
 
 
-MothED=rowmax(clean$HighGrade_Moth)
-MomDropout=MothED<12;
-mutate(MomDropout= ifelse(MothED==NA, NA, MomDropout))
-gen byte MomHS=MothED==12;
-mutate(MomHS= ifelse(MothED==NA, NA, MomHS))
-mutate(MomSomeColl=MothED>=13 & MothED!=NA
-mutate(MomSomeColl= ifelse(MothED==NA, NA, MomSomeColl))
+clean %>% group_by(Race_Child, PreK) %>%
+  summarize(avg.MothED = mean(MothED,na.rm = TRUE),sd.MothED = sd(MothED, na.rm = TRUE))
+```
+
+
+#### MotherSomeCollege: MomSomeColl
+```{r}
+clean %>% group_by(Race_Child, PreK) %>%
+  summarize(avg.MomSomeColl = mean(MomSomeColl,na.rm = TRUE),sd.MomSomeColl = sd(MomSomeColl, na.rm = TRUE))
+
+
+clean %>% group_by(Race_Child, PreK_FE) %>%
+  summarize(avg.MomSomeColl = mean(MomSomeColl,na.rm = TRUE),sd.MomSomeColl = sd(MomSomeColl, na.rm = TRUE))
+```
 
 
 #### AFQT
